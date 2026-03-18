@@ -15,3 +15,14 @@ This is a new/empty repository. Update this file as the project takes shape with
 - sudo is available for system packages
 - Docker daemon is available; published ports accessible on localhost
 - Outbound network is firewalled — request access for specific domains/ports as needed
+
+## Git Conventions
+
+Use [Conventional Commits](https://www.conventionalcommits.org/). Every commit message must start with a type prefix:
+
+- `feat:` — new feature or scenario
+- `fix:` — bug fix or correction
+- `chore:` — maintenance, config, dependencies
+- `docs:` — documentation-only changes
+- `refactor:` — restructuring without behavior change
+- `test:` — adding or updating tests
