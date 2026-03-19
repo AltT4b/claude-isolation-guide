@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
 // ---------------------------------------------------------------------------
-// verify.js — Prove that sandbox + permissions hardening are configured.
+// verify.js — Prove that sandbox network isolation is working.
+//
+// Replaces verify.sh: one language, no inline Node-in-bash, no quoting games.
 //
 // What it tests:
-//   1. Sandbox blocks reads of .env* files (denyRead)
-//   2. Sandbox blocks outbound network (allowedDomains)
-//   3. Normal operations within cwd succeed
-//   4. settings.json permissions.deny rules are present and correct
-//   5. settings.local.json permissions.allow rules are present and correct
+//   1. Allowed domain (httpbin.org) is reachable
+//   2. Non-allowed domain (example.com) is blocked
+//   3. Another non-allowed domain (icanhazip.com) is blocked
+//   4. Localhost is blocked (not in allowedDomains)
+//   5. DNS resolution behavior (informational — not pass/fail)
 //
-// Note: permissions.deny enforcement against Claude's Read/Edit/WebFetch
-// tools can only be tested live inside a Claude session. This script
-// validates config correctness and sandbox-layer enforcement.
+// Note: WebFetch/WebSearch are Claude's built-in tools and operate
+// outside the sandbox. They cannot be tested with srt. See README.md
+// for manual testing instructions.
 //
 // Usage:
 //   npm install   # installs @anthropic-ai/sandbox-runtime
@@ -142,163 +144,116 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// Test 1: Read .env.example via Bash should fail (denyRead)
+// Test 1: Allowed domain should be reachable
 // ---------------------------------------------------------------------------
-banner("Test 1 — Read .env.example (denyRead)");
-info("Attempting to read .env.example via a sandboxed Bash command.");
-why("denyRead: [\".env*\"] should block all reads of files matching .env*.");
-why("This is the sandbox layer — it covers Bash but NOT the Read tool.");
+banner("Test 1 — Allowed Domain (httpbin.org)");
+info("Attempting to reach httpbin.org, which is in allowedDomains.");
+why("allowedDomains acts as an allowlist — listed domains should be reachable.");
+why("This confirms the sandbox permits traffic to explicitly allowed destinations.");
 
 {
-  const command = `cat ${process.cwd()}/.env.example`;
+  const command = "curl -sf --max-time 10 https://httpbin.org/get";
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {
-    fail("Read of .env.example succeeded — denyRead may not be working.");
+    if (result.output.includes("origin")) {
+      pass("Request to httpbin.org succeeded — allowed domain is reachable.");
+    } else {
+      pass("Request to httpbin.org returned a response (may not be JSON).");
+    }
   } else {
-    pass("Read of .env.example was denied by the sandbox.");
+    fail("Request to httpbin.org failed — allowed domain should be reachable.");
     console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
+    warn("This could be a network issue unrelated to the sandbox.");
   }
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: Outbound network should be restricted (allowedDomains)
+// Test 2: Non-allowed domain should be blocked
 // ---------------------------------------------------------------------------
-banner("Test 2 — Outbound Network (allowedDomains)");
-info("Attempting to reach https://example.com (not in allowedDomains).");
-why("allowedDomains: [\"api.anthropic.com\"] blocks all other outbound connections.");
-why("This is the sandbox layer — it covers Bash but NOT WebFetch.");
+banner("Test 2 — Blocked Domain (example.com)");
+info("Attempting to reach example.com, which is NOT in allowedDomains.");
+why("Any domain not listed in allowedDomains is blocked by default.");
+why("This is the core of network isolation — default deny, explicit allow.");
 
 {
   const command = "curl -sf --max-time 5 https://example.com";
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {
-    fail("Outbound request to example.com succeeded — network filtering may be off.");
+    fail("Request to example.com succeeded — network filtering may be off.");
   } else {
-    pass("Outbound request to example.com was blocked.");
+    pass("Request to example.com was blocked.");
     console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Test 3: Normal operations within cwd should succeed
+// Test 3: Another non-allowed domain should be blocked
 // ---------------------------------------------------------------------------
-banner("Test 3 — Normal Operations Within cwd");
-info("Writing, reading, and deleting a temp file inside the current directory.");
-why("allowWrite: [\".\"] permits normal file operations within the project.");
-why("This confirms the sandbox is not overly restrictive.");
+banner("Test 3 — Another Blocked Domain (icanhazip.com)");
+info("Attempting to reach icanhazip.com, which is NOT in allowedDomains.");
+why("Testing a second domain confirms this isn't a one-off — it's a policy.");
+why("icanhazip.com returns your public IP — a common recon/exfiltration target.");
 
 {
-  const tempFile = `.sandbox-verify-temp-${process.pid}`;
-  const command = `echo 'hello sandbox' > ${tempFile} && cat ${tempFile} && rm ${tempFile}`;
+  const command = "curl -sf --max-time 5 https://icanhazip.com";
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {
-    if (result.output.includes("hello sandbox")) {
-      pass("Write/read/delete within cwd succeeded.");
-    } else {
-      fail(`Command ran but output was unexpected: ${result.output}`);
-    }
-  } else if (result.output.includes("not available") || result.output.includes("not installed")) {
-    warn("Sandbox runtime (bwrap) not available in this environment — skipping.");
-    warn("This test will pass when run on a system with bubblewrap installed.");
-    pass("Normal operations test skipped (sandbox not available).");
+    fail("Request to icanhazip.com succeeded — network filtering may be off.");
   } else {
-    fail("Normal file operations within cwd failed — sandbox may be too restrictive.");
+    pass("Request to icanhazip.com was blocked.");
     console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Test 4: settings.json permissions.deny rules are present
+// Test 4: Localhost should be blocked (not in allowedDomains)
 // ---------------------------------------------------------------------------
-banner("Test 4 — Permissions Deny Rules (settings.json)");
-info("Parsing .claude/settings.json and validating permissions.deny rules.");
-why("permissions.deny closes the gaps that the sandbox leaves open.");
-why("These rules block Claude's Read, Edit, and Write tools on sensitive paths.");
+banner("Test 4 — Localhost Access");
+info("Attempting to reach localhost:9999 (not in allowedDomains).");
+why("localhost is not special — it's treated like any other domain.");
+why("If you run services on localhost (Docker, dev servers), they're unreachable");
+why("from sandboxed Bash unless you add localhost to allowedDomains.");
 
 {
-  const settingsPath = path.join(__dirname, ".claude", "settings.json");
-  let settings;
-  try {
-    settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-  } catch (err) {
-    fail(`Could not parse ${settingsPath}: ${err.message}`);
-    settings = null;
-  }
-
-  if (settings) {
-    const deny = settings.permissions && settings.permissions.deny;
-    if (!Array.isArray(deny)) {
-      fail("permissions.deny is missing or not an array.");
-    } else {
-      const expected = [
-        "Read(.env*)",
-        "Read(.claude/settings*)",
-        "Edit(.claude/settings*)",
-        "Write(.claude/settings*)",
-        "WebFetch(*)",
-      ];
-
-      let allPresent = true;
-      for (const rule of expected) {
-        if (deny.includes(rule)) {
-          pass(`permissions.deny includes "${rule}".`);
-        } else {
-          fail(`permissions.deny is missing "${rule}".`);
-          allPresent = false;
-        }
-      }
-
-      if (allPresent) {
-        console.log();
-        info("All expected deny rules are present.");
-        why("Read(.env*) closes the Read-tool gap from Scenario 02.");
-        why("WebFetch(*) closes the network gap from Scenario 03.");
-        why("Read/Edit/Write(.claude/settings*) prevents settings tampering.");
-      }
-    }
+  const command = "curl -sf --max-time 3 http://localhost:9999";
+  cmd(`srt "${command}"`);
+  const result = sandboxExec(command);
+  if (result.ok) {
+    fail("Request to localhost succeeded — it should be blocked unless in allowedDomains.");
+  } else {
+    pass("Request to localhost was blocked (not in allowedDomains).");
+    console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: settings.local.json permissions.allow rules are present
+// Test 5: DNS resolution vs HTTP blocking
 // ---------------------------------------------------------------------------
-banner("Test 5 — Permissions Allow Rules (settings.local.json)");
-info("Parsing .claude/settings.local.json and validating permissions.allow rules.");
-why("settings.local.json provides user-level overrides (gitignored).");
-why("allow rules auto-approve common Bash commands to reduce friction.");
+banner("Test 5 — DNS Resolution (informational)");
+info("Checking if DNS resolves for a blocked domain (example.com).");
+why("The sandbox blocks at the connection level, not DNS.");
+why("A domain can resolve to an IP but still be unreachable via HTTP.");
+why("This is informational — both outcomes are valid sandbox behavior.");
 
 {
-  const localPath = path.join(__dirname, ".claude", "settings.local.json");
-  let localSettings;
-  try {
-    localSettings = JSON.parse(fs.readFileSync(localPath, "utf8"));
-  } catch (err) {
-    fail(`Could not parse ${localPath}: ${err.message}`);
-    localSettings = null;
-  }
+  const command = "nslookup example.com 2>&1 || host example.com 2>&1 || echo 'DNS tools not available'";
+  cmd(`srt "${command}"`);
+  const result = sandboxExec(command);
+  const output = result.output;
 
-  if (localSettings) {
-    const allow = localSettings.permissions && localSettings.permissions.allow;
-    if (!Array.isArray(allow)) {
-      fail("permissions.allow is missing or not an array.");
-    } else {
-      const expected = [
-        "Bash(npm *)",
-        "Bash(node *)",
-        "Bash(git *)",
-      ];
-
-      for (const rule of expected) {
-        if (allow.includes(rule)) {
-          pass(`permissions.allow includes "${rule}".`);
-        } else {
-          fail(`permissions.allow is missing "${rule}".`);
-        }
-      }
-    }
+  if (/address|has address|93\.184/i.test(output)) {
+    warn("DNS resolved for example.com even though HTTP is blocked.");
+    console.log("       This is expected — the sandbox blocks connections, not lookups.");
+    console.log(`       Output: ${output.split("\n").slice(0, 3).join("\n       ")}`);
+  } else if (/DNS tools not available/i.test(output)) {
+    warn("DNS lookup tools (nslookup, host) not available in sandbox.");
+    console.log("       This doesn't affect HTTP-level blocking.");
+  } else {
+    warn("DNS did not resolve — sandbox may block DNS too.");
+    console.log(`       Output: ${output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }
 
@@ -311,17 +266,16 @@ console.log();
 console.log(`  ${GREEN}Passed:${RESET} ${passCount} / ${total}`);
 console.log(`  ${RED}Failed:${RESET} ${failCount} / ${total}`);
 console.log();
-console.log(`  ${BOLD}Note:${RESET} These tests cover sandbox enforcement and config validation.`);
-console.log("  Permissions enforcement against Claude's Read/Edit/WebFetch tools");
-console.log("  can only be tested in a live Claude session. See README.md for");
-console.log("  manual testing instructions.");
+console.log(`  ${BOLD}Note:${RESET} These tests cover Bash-level network isolation only.`);
+console.log("  WebFetch and WebSearch are Claude's built-in tools and operate");
+console.log("  outside the sandbox. See README.md for manual testing instructions.");
 console.log();
 
 if (failCount === 0) {
-  console.log(`  ${GREEN}${BOLD}All checks passed. Sandbox + permissions hardening is configured correctly.${RESET}`);
+  console.log(`  ${GREEN}${BOLD}All checks passed. Network isolation is active and working correctly.${RESET}`);
 } else {
   console.log(`  ${YELLOW}${BOLD}Some checks failed. Review the output above.${RESET}`);
-  console.log(`  ${YELLOW}Make sure sandbox is enabled in .claude/settings.json and the permissions`);
+  console.log(`  ${YELLOW}Make sure sandbox is enabled in .claude/settings.json and the network`);
   console.log(`  rules match the expected configuration for this scenario.${RESET}`);
 }
 console.log();

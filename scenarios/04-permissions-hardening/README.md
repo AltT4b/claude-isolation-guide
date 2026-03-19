@@ -51,15 +51,16 @@ npm test
       "Read(.env*)",
       "Read(.claude/settings*)",
       "Edit(.claude/settings*)",
-      "Write(.claude/settings*)"
+      "Write(.claude/settings*)",
+      "WebFetch(*)"
     ]
   }
 }
 ```
 
-### 2. User-level overrides (gitignored)
+### 2. User-level overrides (normally gitignored)
 
-`.claude/settings.local.json` — personal preferences that override project settings:
+`.claude/settings.local.json` — personal preferences that override project settings. In a real project this file would be gitignored; we commit it here so the tests work on clone:
 
 ```json
 {
@@ -157,7 +158,7 @@ To verify that permissions rules actually block Claude's tools, open a Claude Co
 
 1. Ask Claude to read `.env.example` — should be denied by `Read(.env*)` rule
 2. Ask Claude to edit `.claude/settings.json` — should be denied by `Edit(.claude/settings*)` rule
-3. Ask Claude to fetch an arbitrary URL — should be denied by `WebFetch(*)` if configured
+3. Ask Claude to fetch an arbitrary URL — should be denied by `WebFetch(*)`
 
 These tool-level rules can only be enforced inside a live Claude session, not via `srt`.
 

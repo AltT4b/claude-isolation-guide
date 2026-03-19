@@ -1,0 +1,12 @@
+{
+  "name": "scenario-03-network-isolation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstrate sandbox network isolation: allowedDomains, deniedDomains, and default-deny behavior.",
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}

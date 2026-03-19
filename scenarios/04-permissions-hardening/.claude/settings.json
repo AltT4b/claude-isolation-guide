@@ -18,7 +18,8 @@
       "Read(.env*)",
       "Read(.claude/settings*)",
       "Edit(.claude/settings*)",
-      "Write(.claude/settings*)"
+      "Write(.claude/settings*)",
+      "WebFetch(*)"
     ]
   }
 }

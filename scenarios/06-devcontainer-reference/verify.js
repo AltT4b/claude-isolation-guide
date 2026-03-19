@@ -148,8 +148,8 @@ if (!insideContainer) {
 // ---------------------------------------------------------------------------
 banner("Test 3 — Dropped Capabilities");
 info("Checking that Linux capabilities have been dropped.");
-why("--cap-drop=ALL removes all capabilities by default.");
-why("Only NET_BIND_SERVICE should be added back.");
+why("--cap-drop=ALL removes all capabilities.");
+why("No capabilities are added back — the container runs with zero caps.");
 
 if (!insideContainer) {
   skip("Not running inside a container.");
@@ -161,17 +161,14 @@ if (!insideContainer) {
     if (capEffLine) {
       const capHex = capEffLine.split(/\s+/)[1];
       const capInt = parseInt(capHex, 16);
-      // With only NET_BIND_SERVICE (bit 10), CapEff should be 0x0000000000000400 or lower
-      if (capInt <= 0x400) {
+      // With --cap-drop=ALL and no caps added back, CapEff should be 0
+      if (capInt === 0) {
         pass(`Capabilities are minimal (CapEff: ${capHex}).`);
+      } else if (capInt < 0xa80425fb) {
+        warn(`Capabilities not fully dropped but reduced from default (CapEff: ${capHex}).`);
+        pass(`Capabilities are reduced from default (CapEff: ${capHex}).`);
       } else {
-        warn(`Capabilities may not be fully dropped (CapEff: ${capHex}).`);
-        // Still pass if significantly reduced from default (0x00000000a80425fb)
-        if (capInt < 0xa80425fb) {
-          pass(`Capabilities are reduced from default (CapEff: ${capHex}).`);
-        } else {
-          fail(`Capabilities appear to be at default level (CapEff: ${capHex}).`);
-        }
+        fail(`Capabilities appear to be at default level (CapEff: ${capHex}).`);
       }
     } else {
       warn("Could not find CapEff in /proc/1/status.");

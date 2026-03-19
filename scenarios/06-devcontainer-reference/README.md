@@ -43,10 +43,10 @@ The core configuration. Key security settings:
 | Setting | Purpose |
 |---|---|
 | `--cap-drop=ALL` | Remove all Linux capabilities |
-| `--cap-add=NET_BIND_SERVICE` | Add back only what's needed |
 | `--security-opt=no-new-privileges` | Prevent privilege escalation |
 | `--read-only` | Root filesystem is read-only |
 | `--tmpfs=/tmp:rw,noexec,nosuid` | Writable /tmp without exec permission |
+| `--tmpfs=/home/node:rw,nosuid` | Writable home dir for npm cache etc. |
 | `remoteUser: node` | Run as non-root user |
 
 ### 2. Dockerfile
