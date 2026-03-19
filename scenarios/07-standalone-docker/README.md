@@ -97,6 +97,62 @@ The security flags are not just best practices — they are concrete defenses:
 - **noexec on tmpfs** blocks the classic "download and execute in /tmp" attack pattern.
 - **Non-root user** limits blast radius if an attacker escapes the container.
 
+## Break It on Purpose
+
+Each experiment modifies the `docker run` flags. Make the change, run the verify command, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Remove capability restrictions
+
+```diff
+  docker run --rm \
+-   --cap-drop=ALL \
+    --security-opt=no-new-privileges \
+```
+
+Run the verify command. **Test 3 flips to FAIL** — `CapEff` is no longer all zeros. The container now has default capabilities.
+
+**Takeaway:** Docker grants ~14 capabilities by default. `--cap-drop=ALL` removes them all. Without it, processes can bind raw sockets, change ownership, and override DAC permissions.
+
+### Experiment B — Remove read-only root filesystem
+
+```diff
+  docker run --rm \
+    --cap-drop=ALL \
+    --security-opt=no-new-privileges \
+-   --read-only \
+    --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+```
+
+Run the verify command. **Test 4 flips to FAIL** — writes to `/usr/local/` succeed. System binaries are now modifiable.
+
+**Takeaway:** Without `--read-only`, an attacker can replace `node`, `git`, or any system binary with a trojaned version that persists for the container's lifetime.
+
+### Experiment C — Run as root
+
+Edit the Dockerfile:
+
+```diff
+- USER claude
++ # USER claude
+```
+
+Rebuild (`docker build -t claude-sandbox .`) and run the verify command. **Test 2 flips to FAIL** — `whoami` returns `root` instead of `claude`.
+
+**Takeaway:** Root inside a container is less dangerous than root on the host, but it still enables capability use, file ownership changes, and some container escape techniques. Always run as a non-root user.
+
+### Experiment D — Add the privileged flag
+
+```diff
+  docker run --rm \
+-   --cap-drop=ALL \
+-   --security-opt=no-new-privileges \
++   --privileged \
+```
+
+Run the verify command. **Tests 2, 3, 5, and 7 flip to FAIL** — the container has all capabilities, can escalate privileges, and effectively has host-level access.
+
+**Takeaway:** `--privileged` is the nuclear option. It disables almost all container isolation. Never use it for untrusted workloads.
+
 ## Gotchas
 
 - **Volume mount is bidirectional.** Claude can modify your project files. That's the point — it needs to write code. But be aware this is not a one-way mirror.

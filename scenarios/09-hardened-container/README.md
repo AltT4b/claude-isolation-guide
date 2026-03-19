@@ -117,6 +117,63 @@ The verification command from Quick Start (`docker compose run --rm claude node 
 | Resource limits | cgroup memory limit | ~4GB |
 | No privilege escalation | NoNewPrivs flag | Set (1) |
 
+## Break It on Purpose
+
+Each experiment is a single edit to `docker-compose.yml`. Make the change, rebuild (`docker compose build`), run `docker compose run --rm claude node verify.js`, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Restore capabilities
+
+```diff
+-     cap_drop:
+-       - ALL
++     # cap_drop:
++     #   - ALL
+```
+
+Rebuild and run the verify. **Test 3 flips to FAIL** — `CapEff` is no longer all zeros. The container now has default capabilities including `NET_RAW`, `CHOWN`, and `DAC_OVERRIDE`.
+
+**Takeaway:** Capabilities are the keys to kernel features. Dropping them all is the most impactful single line in the compose file.
+
+### Experiment B — Remove read-only root filesystem
+
+```diff
+-     read_only: true
++     read_only: false
+```
+
+Rebuild and run the verify. **Test 4 flips to FAIL** — writes to `/usr/local/` succeed. System binaries can be modified.
+
+**Takeaway:** `read_only: true` prevents persistent tampering. Combined with tmpfs mounts, it gives you writable scratch space without writable system directories.
+
+### Experiment C — Remove resource limits
+
+```diff
+-     deploy:
+-       resources:
+-         limits:
+-           cpus: "2"
+-           memory: 4G
+-         reservations:
+-           memory: 1G
++     # deploy:
++     #   resources: ...
+```
+
+Rebuild and run the verify. **Test 6 flips to FAIL** — no memory limit is enforced. A fork bomb or memory leak can now exhaust host resources.
+
+**Takeaway:** Resource limits are your last line of defense against denial-of-service. Without them, a runaway process inside the container can starve the host.
+
+### Experiment D — Run as root
+
+```diff
+-     user: "1001:1001"
++     # user: "1001:1001"
+```
+
+Rebuild and run the verify. **Test 2 flips to FAIL** — the process runs as root (uid 0) instead of uid 1001.
+
+**Takeaway:** Root inside a container can use any remaining capabilities, change file ownership, and attempt kernel exploits. A non-root user limits blast radius even if other controls fail.
+
 ## Gotchas
 
 - **Resource limits require cgroups v2.** Older Docker hosts with cgroups v1 may not enforce `deploy.resources` in non-swarm mode. Check with `docker info | grep Cgroup`.

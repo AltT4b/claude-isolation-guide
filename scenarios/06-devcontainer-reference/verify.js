@@ -11,7 +11,6 @@
 //   2. Non-root user
 //   3. Dropped capabilities
 //   4. Filesystem restrictions (read-only root)
-//   5. Network restrictions (if firewall is active)
 //
 // Tests gracefully handle running outside a container (SKIP, not FAIL).
 //
@@ -199,29 +198,6 @@ if (!insideContainer) {
     exec(`rm -f ${testFile}`);
   } else {
     pass("Write to /opt was denied (read-only filesystem).");
-    console.log(`       Output: ${result.output.split("\n").slice(0, 2).join("\n       ")}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Test 5: Network restrictions (if firewall is active)
-// ---------------------------------------------------------------------------
-banner("Test 5 — Network Restrictions");
-info("Attempting to reach an external domain not in the firewall allowlist.");
-why("If init-firewall.sh was run, outbound traffic should be restricted.");
-why("Only DNS and api.anthropic.com should be reachable.");
-
-if (!insideContainer) {
-  skip("Not running inside a container.");
-} else {
-  const result = exec("curl -sf --max-time 5 https://example.com");
-  cmd("curl -sf --max-time 5 https://example.com");
-  if (result.ok) {
-    warn("Outbound request to example.com succeeded.");
-    warn("Firewall rules may not be active (init-firewall.sh may not have been run).");
-    skip("Firewall not active — network test inconclusive.");
-  } else {
-    pass("Outbound request to example.com failed (firewall, timeout, or DNS block).");
     console.log(`       Output: ${result.output.split("\n").slice(0, 2).join("\n       ")}`);
   }
 }

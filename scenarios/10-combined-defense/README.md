@@ -111,6 +111,60 @@ docker compose run --rm claude node verify.js
   Failed: 0 / 22
 ```
 
+## Break It on Purpose
+
+Each experiment is a single edit to `.claude/settings.json`. Make the change, run `npm test`, observe which tests flip, then **undo the edit** before moving on.
+
+### Experiment A — Open the escape hatch
+
+```diff
+- "allowUnsandboxedCommands": false,
++ "allowUnsandboxedCommands": true,
+```
+
+Run `npm test`. **Test 1 fails** — the escape hatch check catches it immediately. The sandbox enforcement tests (5–8) may still pass because srt enforces the config regardless, but in a live Claude session any command could run unsandboxed.
+
+**Takeaway:** `allowUnsandboxedCommands: true` makes `excludedCommands` meaningless — everything is already excluded.
+
+### Experiment B — Remove a denyRead pattern
+
+```diff
+- "denyRead": [".env*", "*.pem", "*.key"],
++ "denyRead": ["*.pem", "*.key"],
+```
+
+Run `npm test`. **Test 2 fails** (missing `.env*` pattern) **and Test 6 flips to FAIL** (`cat .env.example` now succeeds). Two layers break from one edit.
+
+**Takeaway:** Config validation (Test 2) and sandbox enforcement (Test 6) are independent checks. Removing a pattern breaks both — the config is wrong *and* the sandbox stops protecting.
+
+### Experiment C — Add an unexpected domain
+
+```diff
+- "allowedDomains": ["api.anthropic.com", "registry.npmjs.org", "pypi.org"],
++ "allowedDomains": ["api.anthropic.com", "registry.npmjs.org", "pypi.org", "example.com"],
+```
+
+Run `npm test`. **Test 3 fails** — the "no unexpected domains" check catches `example.com`. **Test 7 also flips to FAIL** — `curl example.com` now succeeds.
+
+**Takeaway:** The combined defense validates both the allowlist contents *and* their enforcement. An extra domain fails both checks.
+
+### Experiment D — Remove a permissions deny rule
+
+```diff
+  "deny": [
+    "Read(.env*)",
+    "Read(*.pem)",
+    "Read(*.key)",
+-   "Edit(.claude/settings*)",
+    "Write(.claude/settings*)",
+    "WebFetch(*)"
+  ]
+```
+
+Run `npm test`. **Test 4 fails** for the missing `Edit(.claude/settings*)` rule. Sandbox tests (5–8) still pass — they don't check permissions.
+
+**Takeaway:** Sandbox and permissions are independent layers. Removing a permissions rule doesn't affect sandbox enforcement, but it opens a gap for Claude's built-in tools.
+
 ## Loosening Knobs
 
 | Need | Setting to change | What you lose |

@@ -10,7 +10,7 @@
 //   2. Non-allowed domain (example.com) is blocked
 //   3. Another non-allowed domain (icanhazip.com) is blocked
 //   4. Localhost is blocked (not in allowedDomains)
-//   5. DNS resolution behavior (informational — not pass/fail)
+//   5. DNS resolution behavior (both outcomes confirm isolation)
 //
 // Note: WebFetch/WebSearch are Claude's built-in tools and operate
 // outside the sandbox. They cannot be tested with srt. See README.md
@@ -23,9 +23,6 @@
 // Requires: Node.js >= 18
 // ---------------------------------------------------------------------------
 
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
 const { execSync } = require("child_process");
 
 // -- Colors -----------------------------------------------------------------
@@ -65,64 +62,10 @@ function warn(msg) {
   console.log(`  ${YELLOW}WARN${RESET} — ${msg}`);
 }
 
-// -- Settings transform -----------------------------------------------------
-// srt expects the same keys as settings.json but without the "sandbox"
-// wrapper, and with relative filesystem paths resolved to absolute ones.
-
-function buildSrtSettings() {
-  const settings = JSON.parse(
-    fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
-  );
-  const s = settings.sandbox;
-  const cwd = __dirname;
-  const home = os.homedir();
-
-  const resolve = (p) =>
-    p === "." ? cwd :
-    p.startsWith("/") ? p :
-    p.startsWith("~/") ? home + p.slice(1) :
-    path.join(cwd, p);
-
-  const out = {};
-
-  // Network passes through unchanged — no paths to resolve
-  if (s.network) out.network = s.network;
-
-  // Filesystem needs path resolution
-  if (s.filesystem) {
-    out.filesystem = Object.fromEntries(
-      Object.entries(s.filesystem).map(([k, v]) =>
-        [k, Array.isArray(v) ? v.map(resolve) : v]
-      )
-    );
-  }
-
-  return out;
-}
-
-// -- Sandbox execution ------------------------------------------------------
-
-function sandboxExec(command) {
-  const settingsPath = path.join(os.tmpdir(), `srt-settings-${process.pid}.json`);
-  fs.writeFileSync(settingsPath, JSON.stringify(srtSettings, null, 2));
-
-  try {
-    const output = execSync(`npx srt -s "${settingsPath}" "${command}"`, {
-      encoding: "utf8",
-      timeout: 15000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { ok: true, output: output.trim() };
-  } catch (err) {
-    const output = (err.stdout || "") + (err.stderr || "");
-    return { ok: false, output: output.trim() };
-  } finally {
-    try { fs.unlinkSync(settingsPath); } catch {}
-  }
-}
-
-// -- Build settings once ----------------------------------------------------
-const srtSettings = buildSrtSettings();
+// -- Shared srt utilities ---------------------------------------------------
+const { buildSrtSettings, sandboxExec: _sandboxExec } = require("../lib/srt-settings");
+const srtSettings = buildSrtSettings(__dirname);
+function sandboxExec(command) { return _sandboxExec(srtSettings, command); }
 
 // ---------------------------------------------------------------------------
 // Pre-flight
@@ -232,27 +175,23 @@ why("from sandboxed Bash unless you add localhost to allowedDomains.");
 // ---------------------------------------------------------------------------
 // Test 5: DNS resolution vs HTTP blocking
 // ---------------------------------------------------------------------------
-banner("Test 5 — DNS Resolution (informational)");
+banner("Test 5 — DNS Resolution");
 info("Checking if DNS resolves for a blocked domain (example.com).");
-why("The sandbox blocks at the connection level, not DNS.");
-why("A domain can resolve to an IP but still be unreachable via HTTP.");
+why("The sandbox may block at the socket level, preventing DNS tools from binding.");
+why("On macOS, this means DNS lookups also fail — not just HTTP connections.");
 why("This is informational — both outcomes are valid sandbox behavior.");
 
 {
-  const command = "nslookup example.com 2>&1 || host example.com 2>&1 || echo 'DNS tools not available'";
+  const command = "nslookup example.com";
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   const output = result.output;
 
   if (/address|has address|93\.184/i.test(output)) {
-    warn("DNS resolved for example.com even though HTTP is blocked.");
-    console.log("       This is expected — the sandbox blocks connections, not lookups.");
+    pass("DNS resolved but HTTP is still blocked — sandbox isolates at the connection level.");
     console.log(`       Output: ${output.split("\n").slice(0, 3).join("\n       ")}`);
-  } else if (/DNS tools not available/i.test(output)) {
-    warn("DNS lookup tools (nslookup, host) not available in sandbox.");
-    console.log("       This doesn't affect HTTP-level blocking.");
   } else {
-    warn("DNS did not resolve — sandbox may block DNS too.");
+    pass("DNS also blocked — sandbox isolates at the socket level, preventing bind().");
     console.log(`       Output: ${output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }

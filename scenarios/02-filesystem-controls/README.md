@@ -50,6 +50,43 @@ Passed: 6 / 6
 
 **Not tested:** the Read-vs-Bash gap (requires a live Claude session, not srt (sandbox runtime — the CLI that enforces sandbox rules outside a live Claude session)).
 
+## Break It on Purpose
+
+Each experiment is a single edit to `.claude/settings.json`. Make the change, run `npm test`, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Remove the read deny rule
+
+```diff
+- "denyRead": [".env*", "~/.ssh"],
++ "denyRead": ["~/.ssh"],
+```
+
+Run `npm test`. **Test 1 flips to FAIL** — `cat .env.example` now succeeds and prints the fake API key. All other tests are unchanged.
+
+**Takeaway:** `denyRead` patterns must be explicitly listed. Without `.env*`, secrets are readable by any Bash command.
+
+### Experiment B — Remove the write deny rule
+
+```diff
+- "denyWrite": ["secrets/"],
++ "denyWrite": [],
+```
+
+Run `npm test`. **Test 3 flips to FAIL** — writes to `secrets/` now succeed despite `allowWrite: ["."]` covering the parent directory.
+
+**Takeaway:** `denyWrite` overrides `allowWrite`. When both match, deny wins — this is how you protect subdirectories inside an otherwise writable project.
+
+### Experiment C — Remove write permissions entirely
+
+```diff
+- "allowWrite": ["."],
++ "allowWrite": [],
+```
+
+Run `npm test`. **Test 2 flips to FAIL** — even `touch test-file` inside the project directory is denied. Tests 3 and 4 still pass (they test denial).
+
+**Takeaway:** Without `allowWrite`, nothing is writable. The sandbox is deny-by-default for writes — you must explicitly grant access.
+
 ## Next Steps
 
 - **[Scenario 03 — Network Isolation](../03-network-isolation/):** Control outbound network access with domain allowlists.

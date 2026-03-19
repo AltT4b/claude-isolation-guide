@@ -38,6 +38,43 @@ PASS — Write/read/delete within cwd succeeded.
 Passed: 4 / 4
 ```
 
+## Break It on Purpose
+
+Each experiment is a single edit to `.claude/settings.json`. Make the change, run `npm test`, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Disable the sandbox
+
+```diff
+- "enabled": true,
++ "enabled": false,
+```
+
+Run `npm test`. **All tests flip to FAIL** — writes to `/tmp` succeed, `curl` reaches the internet, and there's nothing stopping any command. The sandbox is all-or-nothing.
+
+**Takeaway:** `enabled: true` is the foundation. Everything else in the config is meaningless without it.
+
+### Experiment B — Open a network hole
+
+```diff
+- "allowedDomains": ["api.anthropic.com"],
++ "allowedDomains": ["api.anthropic.com", "example.com"],
+```
+
+Run `npm test`. **Test 2 flips to FAIL** — `curl example.com` now succeeds. Test 1 (filesystem) is unaffected.
+
+**Takeaway:** `allowedDomains` is an allowlist. Every domain you add is a potential exfiltration channel.
+
+### Experiment C — Remove write permissions
+
+```diff
+- "allowWrite": ["."],
++ "allowWrite": [],
+```
+
+Run `npm test`. **Test 3 flips to FAIL** — even writes inside your project directory are blocked. Tests 1 and 2 still pass (they test denial, not permission).
+
+**Takeaway:** The sandbox requires explicit write paths. An empty `allowWrite` means nothing is writable — not even your own project.
+
 ## Next Steps
 
 - **[Scenario 02 — Filesystem Controls](../02-filesystem-controls/):** Fine-grained read/write rules with `denyRead` and `denyWrite`.

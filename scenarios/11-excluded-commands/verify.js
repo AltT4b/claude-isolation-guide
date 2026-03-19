@@ -22,7 +22,6 @@
 // ---------------------------------------------------------------------------
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { execSync } = require("child_process");
 
@@ -63,76 +62,23 @@ function warn(msg) {
   console.log(`  ${YELLOW}WARN${RESET} — ${msg}`);
 }
 
-// -- Settings transform -----------------------------------------------------
-// srt expects the same keys as settings.json but without the "sandbox"
-// wrapper, and with relative filesystem paths resolved to absolute ones.
-
-function buildSrtSettings() {
-  const settings = JSON.parse(
-    fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
-  );
-  const s = settings.sandbox;
-  const cwd = __dirname;
-  const home = os.homedir();
-
-  const resolve = (p) =>
-    p === "." ? cwd :
-    p.startsWith("/") ? p :
-    p.startsWith("~/") ? home + p.slice(1) :
-    path.join(cwd, p);
-
-  const out = {};
-
-  // Network passes through unchanged — no paths to resolve
-  if (s.network) out.network = s.network;
-
-  // Filesystem needs path resolution. If absent from settings.json, provide
-  // a sensible default so srt gets a valid config (it requires both network
-  // and filesystem keys).
-  const fs_section = s.filesystem || {
+// -- Shared srt utilities ---------------------------------------------------
+const { buildSrtSettings, sandboxExec: _sandboxExec } = require("../lib/srt-settings");
+const srtSettings = buildSrtSettings(__dirname, {
+  filesystemDefaults: {
     allowRead: [],
     denyRead: [],
     allowWrite: ["."],
     denyWrite: [],
-  };
-  out.filesystem = Object.fromEntries(
-    Object.entries(fs_section).map(([k, v]) =>
-      [k, Array.isArray(v) ? v.map(resolve) : v]
-    )
-  );
-
-  return out;
-}
-
-// -- Sandbox execution ------------------------------------------------------
-
-function sandboxExec(command) {
-  const settingsPath = path.join(os.tmpdir(), `srt-settings-${process.pid}.json`);
-  fs.writeFileSync(settingsPath, JSON.stringify(srtSettings, null, 2));
-
-  try {
-    const output = execSync(`npx srt -s "${settingsPath}" "${command}"`, {
-      encoding: "utf8",
-      timeout: 15000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { ok: true, output: output.trim() };
-  } catch (err) {
-    const output = (err.stdout || "") + (err.stderr || "");
-    return { ok: false, output: output.trim() };
-  } finally {
-    try { fs.unlinkSync(settingsPath); } catch {}
-  }
-}
+  },
+});
+function sandboxExec(command) { return _sandboxExec(srtSettings, command); }
 
 // -- Load settings ----------------------------------------------------------
 const settings = JSON.parse(
   fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
 );
 const sandbox = settings.sandbox;
-
-// -- Build srt settings once ------------------------------------------------
-const srtSettings = buildSrtSettings();
 
 // ---------------------------------------------------------------------------
 // Pre-flight

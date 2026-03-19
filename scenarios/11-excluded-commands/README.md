@@ -78,6 +78,43 @@ npm install && npm test
 
 Note: We cannot test that Docker commands actually bypass the sandbox from within `srt`. The verify script focuses on config correctness and confirms sandbox enforcement still works for non-excluded commands.
 
+## Break It on Purpose
+
+Each experiment is a single edit to `.claude/settings.json`. Make the change, run `npm test`, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Remove docker from excluded commands
+
+```diff
+- "excludedCommands": ["docker", "docker-compose"],
++ "excludedCommands": [],
+```
+
+Run `npm test`. **Test 2 flips to FAIL** — the config check catches the missing `docker` entry. Test 4 (curl blocked) still passes because removing exclusions makes the sandbox *more* restrictive, not less.
+
+**Takeaway:** Without the exclusion, Docker commands would be sandboxed — and likely fail because Docker needs direct host access to the Docker socket.
+
+### Experiment B — Open the escape hatch
+
+```diff
+- "allowUnsandboxedCommands": false,
++ "allowUnsandboxedCommands": true,
+```
+
+Run `npm test`. **Test 3 flips to FAIL** — the escape hatch is open. In a live session, this means *any* command can run unsandboxed, making `excludedCommands` pointless.
+
+**Takeaway:** `excludedCommands` is a scalpel. `allowUnsandboxedCommands: true` is a sledgehammer. The whole point of this scenario is to use the scalpel.
+
+### Experiment C — Exclude curl from the sandbox
+
+```diff
+- "excludedCommands": ["docker", "docker-compose"],
++ "excludedCommands": ["docker", "docker-compose", "curl"],
+```
+
+Run `npm test`. **Test 4 flips to FAIL** — `curl example.com` now succeeds because curl bypasses the sandbox entirely. Tests 1–3 still pass.
+
+**Takeaway:** Every entry in `excludedCommands` is a hole in the sandbox. Excluding `curl` defeats network isolation. Be surgical — only exclude what truly needs host access.
+
 ## Gotchas
 
 - **`excludedCommands` is a prefix match.** `"docker"` matches `docker`, `docker-compose`, `docker buildx`, etc. Be aware of what you're excluding.

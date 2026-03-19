@@ -18,6 +18,14 @@ Sandbox network allowlist: only listed domains are reachable from Bash. Everythi
 }
 ```
 
+## Prerequisites
+
+- Node.js >= 18
+- `nslookup` — used by Test 5 (DNS resolution check). Install via:
+  - **macOS:** `brew install bind` (provides `nslookup`)
+  - **Ubuntu/Debian:** `sudo apt install dnsutils`
+  - **Alpine:** `apk add bind-tools`
+
 ## Verify
 
 ```bash
@@ -98,6 +106,43 @@ Start Claude in this directory, then try:
    Expected: Denied. Bash commands go through the sandbox.
 
 **The takeaway:** Sandbox network rules protect against Bash-level exfiltration. They do _not_ restrict Claude's own tool usage. For full network control, combine sandbox rules with `permissions.deny` rules (see [Scenario 04](../04-permissions-hardening/)).
+
+## Break It on Purpose
+
+Each experiment is a single edit to `.claude/settings.json`. Make the change, run `npm test`, observe which test flips, then **undo the edit** before moving on.
+
+### Experiment A — Remove an allowed domain
+
+```diff
+- "allowedDomains": ["api.anthropic.com", "httpbin.org"],
++ "allowedDomains": ["api.anthropic.com"],
+```
+
+Run `npm test`. **Test 1 flips to FAIL** — `curl httpbin.org` is now blocked. Tests 2–4 still pass (they were already blocked).
+
+**Takeaway:** Only explicitly listed domains are reachable. Removing a domain immediately cuts off access.
+
+### Experiment B — Allow a blocked domain
+
+```diff
+- "allowedDomains": ["api.anthropic.com", "httpbin.org"],
++ "allowedDomains": ["api.anthropic.com", "httpbin.org", "example.com"],
+```
+
+Run `npm test`. **Test 2 flips to FAIL** — `curl example.com` now succeeds. Test 3 (icanhazip.com) still passes because it wasn't added.
+
+**Takeaway:** Each domain in the allowlist is a hole. Adding even one domain opens a potential exfiltration channel.
+
+### Experiment C — Empty the allowlist
+
+```diff
+- "allowedDomains": ["api.anthropic.com", "httpbin.org"],
++ "allowedDomains": [],
+```
+
+Run `npm test`. **Test 1 flips to FAIL** (httpbin.org now blocked). Tests 2–4 still pass. Total network isolation — nothing is reachable from Bash.
+
+**Takeaway:** An empty allowlist means complete network lockdown. This is the most secure option if your workflow doesn't need outbound access from Bash.
 
 ## Gotchas
 
