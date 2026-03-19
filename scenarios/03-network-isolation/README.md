@@ -1,6 +1,6 @@
 # Scenario 03 — Network Isolation
 
-Demonstrates how the sandbox controls outbound network access: which domains are allowed, which are blocked, and what the defaults do. Covers both Bash-level enforcement (curl/wget via `srt`) and Claude's built-in tools (WebFetch/WebSearch).
+Sandbox network allowlist: only listed domains are reachable from Bash. Everything else is blocked.
 
 ## Config
 
@@ -13,15 +13,31 @@ Demonstrates how the sandbox controls outbound network access: which domains are
       "allowedDomains": ["api.anthropic.com", "httpbin.org"],
       "deniedDomains": []
     },
-    "filesystem": {
-      "allowRead": [],
-      "denyRead": [],
-      "allowWrite": ["."],
-      "denyWrite": []
-    }
+    "filesystem": { "allowWrite": ["."] }
   }
 }
 ```
+
+## Verify
+
+```bash
+npm install
+npm test
+```
+
+## What You'll See
+
+| Test | Command | Expected | Why |
+|---|---|---|---|
+| Allowed domain | `curl httpbin.org/get` | Succeeds | In `allowedDomains` |
+| Blocked domain | `curl example.com` | Denied | Not in `allowedDomains` |
+| Another blocked domain | `curl icanhazip.com` | Denied | Not in `allowedDomains` |
+| Localhost access | `curl localhost:9999` | Denied | Not in `allowedDomains` |
+| DNS resolution | `nslookup example.com` | Behavior varies | DNS may resolve even if HTTP is blocked |
+
+---
+
+## Deep Dive
 
 ### How network rules work
 
@@ -56,28 +72,10 @@ A domain blocked in the sandbox can still be fetched by WebFetch. These are inde
 
 ### srt vs live session: prompt vs block
 
-There's a subtle difference between how network rules are enforced:
-
 - **`srt` (verify.sh):** Strict deny. If a domain isn't in `allowedDomains`, the connection fails silently.
 - **Live Claude session:** Unlisted domains trigger a **user prompt** — Claude asks whether to allow the connection. It's not a silent block unless `allowManagedDomainsOnly` is set (managed/enterprise settings only).
 
 The verify script tests the strict-deny behavior. In a real session, users get a chance to approve ad-hoc domains.
-
-## Quick Start
-
-```bash
-npm install && npm test
-```
-
-## Verify It Works
-
-| Test | Command | Expected | Why |
-|---|---|---|---|
-| Allowed domain | `curl httpbin.org/get` | Succeeds | In `allowedDomains` |
-| Blocked domain | `curl example.com` | Denied | Not in `allowedDomains` |
-| Another blocked domain | `curl icanhazip.com` | Denied | Not in `allowedDomains` |
-| Localhost access | `curl localhost:9999` | Denied | Not in `allowedDomains` |
-| DNS resolution | `nslookup example.com` | Behavior varies | DNS may resolve even if HTTP is blocked |
 
 ## Manual Testing: WebFetch/WebSearch
 

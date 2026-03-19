@@ -2,34 +2,25 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker", "docker-compose"],
     "filesystem": {
-      "allowWrite": [
-        "."
-      ],
-      "denyRead": [
-        ".env*",
-        "*.pem",
-        "*.key"
-      ],
-      "denyWrite": [
-        ".claude/",
-        "secrets/",
-        ".git/hooks/"
-      ]
+      "allowRead": [],
+      "allowWrite": ["."],
+      "denyRead": [".env*", "*.pem", "*.key"],
+      "denyWrite": [".claude/", "secrets/", ".git/hooks/"]
     },
     "network": {
-      "allowedDomains": [
-        "api.anthropic.com",
-        "registry.npmjs.org",
-        "pypi.org"
-      ]
-    },
-    "excludedCommands": [
-      "docker",
-      "docker-compose"
-    ]
+      "allowedDomains": ["api.anthropic.com", "registry.npmjs.org", "pypi.org"],
+      "deniedDomains": []
+    }
   },
   "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(git *)",
+      "Bash(npx *)"
+    ],
     "deny": [
       "Read(.env*)",
       "Read(*.pem)",
@@ -37,12 +28,6 @@
       "Edit(.claude/settings*)",
       "Write(.claude/settings*)",
       "WebFetch(*)"
-    ],
-    "allow": [
-      "Bash(npm *)",
-      "Bash(node *)",
-      "Bash(git *)",
-      "Bash(npx *)"
     ]
   }
 }

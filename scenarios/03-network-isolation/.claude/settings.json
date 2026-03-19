@@ -2,15 +2,20 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
-    "network": {
-      "allowedDomains": ["api.anthropic.com", "httpbin.org"],
-      "deniedDomains": []
-    },
+    "excludedCommands": [],
     "filesystem": {
       "allowRead": [],
       "denyRead": [],
       "allowWrite": ["."],
       "denyWrite": []
+    },
+    "network": {
+      "allowedDomains": ["api.anthropic.com", "httpbin.org"],
+      "deniedDomains": []
     }
+  },
+  "permissions": {
+    "allow": [],
+    "deny": []
   }
 }

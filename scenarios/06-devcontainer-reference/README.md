@@ -1,14 +1,57 @@
 # Scenario 06 — Devcontainer Reference
 
-A `.devcontainer/devcontainer.json` + Dockerfile that defines an isolated development environment for Claude Code. The container provides its own filesystem, network namespace, and process tree — isolation beyond what the native sandbox offers on its own.
+A devcontainer that wraps Claude Code in an isolated environment: dropped capabilities, read-only root fs, non-root user, optional network firewall. Sandbox still runs inside for belt-and-suspenders.
 
-## Why It Matters
+## Prerequisites
 
-The native sandbox restricts individual Bash commands (per-command OS-level restrictions via Seatbelt/bubblewrap). A container restricts the entire environment. Even if the sandbox has a gap, the container limits the blast radius.
+You need **Docker** running locally, plus at least one of:
 
-They are complementary — you can run the sandbox inside a container for defense in depth.
+### Option A — VS Code + Dev Containers extension
 
-## Container vs Sandbox
+1. Install [VS Code](https://code.visualstudio.com/).
+2. Install the **Dev Containers** extension (`ms-vscode-remote.remote-containers`) from the Extensions marketplace.
+3. (Optional) Enable the `code` shell command: open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) → **Shell Command: Install 'code' command in PATH**.
+
+### Option B — Devcontainer CLI (no VS Code required)
+
+The `@devcontainers/cli` package is included as a devDependency. Install it along with everything else:
+
+```bash
+npm install
+```
+
+Then use `npx devcontainer` to run it.
+
+## Verify
+
+```bash
+# VS Code — open this scenario folder, then:
+code .  # → "Reopen in Container" when prompted (or use Command Palette → "Dev Containers: Reopen in Container")
+
+# CLI — no VS Code needed:
+npm install
+npx devcontainer up --workspace-folder .
+npx devcontainer exec --workspace-folder . npm test
+```
+
+## What You Get
+
+| Security control | How |
+|---|---|
+| No Linux capabilities | `--cap-drop=ALL` |
+| No privilege escalation | `--security-opt=no-new-privileges` |
+| Read-only root filesystem | `--read-only` |
+| Writable /tmp, no exec | `--tmpfs=/tmp:rw,noexec,nosuid` |
+| Non-root user | `remoteUser: node` |
+| Network filtering (optional) | `init-firewall.sh` — iptables allowlist |
+
+Tests SKIP gracefully when run outside a container.
+
+---
+
+## Deep Dive
+
+### Container vs Sandbox
 
 | | Sandbox (srt) | Container (devcontainer) |
 |---|---|---|
@@ -16,67 +59,19 @@ They are complementary — you can run the sandbox inside a container for defens
 | **Mechanism** | Seatbelt (macOS) / bubblewrap (Linux) | Linux namespaces + cgroups |
 | **Filesystem** | Allowlist/denylist per command | Read-only root, mount restrictions |
 | **Network** | Domain allowlist per command | Full network namespace, iptables |
-| **Process** | Inherits host process tree | Isolated PID namespace |
 | **Resource limits** | None | cgroups (CPU, memory, I/O) |
-| **Best for** | Fine-grained command control | Blast-radius containment |
 
-**Use both.** The container limits what the environment can touch; the sandbox limits what individual commands can do within it. Belt and suspenders.
+**Use both.** The container limits what the environment can touch; the sandbox limits what individual commands can do within it.
 
-## Quick Start
+### Setup details
 
-```bash
-# Open in VS Code with Dev Containers extension
-code .
-# -> "Reopen in Container" when prompted
+**Dockerfile:** Builds on `node:20-slim`. Installs `curl` and `iptables`, copies project files, drops to `node` user.
 
-# Or from the CLI
-devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . npm test
-```
-
-## Setup
-
-### 1. devcontainer.json
-
-The core configuration. Key security settings:
-
-| Setting | Purpose |
-|---|---|
-| `--cap-drop=ALL` | Remove all Linux capabilities |
-| `--security-opt=no-new-privileges` | Prevent privilege escalation |
-| `--read-only` | Root filesystem is read-only |
-| `--tmpfs=/tmp:rw,noexec,nosuid` | Writable /tmp without exec permission |
-| `--tmpfs=/home/node:rw,nosuid` | Writable home dir for npm cache etc. |
-| `remoteUser: node` | Run as non-root user |
-
-### 2. Dockerfile
-
-Builds on `node:20-slim`. Installs `curl` and `iptables`, copies project files, drops to the `node` user.
-
-### 3. init-firewall.sh (optional)
-
-iptables rules that restrict outbound traffic to DNS and `api.anthropic.com` only. Must be run as root before dropping privileges — requires `NET_ADMIN` capability during init.
+**init-firewall.sh (optional):** iptables rules restricting outbound to DNS + `api.anthropic.com`. Requires root — run before dropping privileges:
 
 ```bash
-# Run manually during container setup (requires root)
 sudo bash .devcontainer/init-firewall.sh
 ```
-
-## Verify It Works
-
-```bash
-npm test
-```
-
-| Test | What it checks | Inside container | Outside container |
-|---|---|---|---|
-| Container detection | `/.dockerenv` or cgroup indicators | PASS | SKIP |
-| Non-root user | `whoami` is not root | PASS | SKIP |
-| Dropped capabilities | `/proc/1/status` CapEff is minimal | PASS | SKIP |
-| Read-only filesystem | Write to `/opt` fails | PASS | SKIP |
-| Network restrictions | `curl https://example.com` fails | PASS (if firewall active) | SKIP |
-
-Running outside a container is fine — tests SKIP gracefully instead of failing.
 
 ## Gotchas
 

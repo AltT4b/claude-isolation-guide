@@ -15,13 +15,14 @@ Proves the sandbox is active: Bash commands can't write outside the project dire
 }
 ```
 
-## Quick Start
+## Verify
 
 ```bash
-npm install && npm test
+npm install
+npm test
 ```
 
-## Verify It Works
+## What You'll See
 
 | Test | Command | Expected |
 |---|---|---|

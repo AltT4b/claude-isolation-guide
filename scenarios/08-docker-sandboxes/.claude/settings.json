@@ -3,8 +3,19 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "excludedCommands": ["docker", "docker-compose"],
+    "filesystem": {
+      "allowRead": [],
+      "denyRead": [".env*"],
+      "allowWrite": ["."],
+      "denyWrite": [".claude/"]
+    },
     "network": {
-      "allowedDomains": ["api.anthropic.com"]
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": []
     }
+  },
+  "permissions": {
+    "allow": [],
+    "deny": []
   }
 }

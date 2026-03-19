@@ -2,6 +2,7 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
+    "excludedCommands": [],
     "filesystem": {
       "allowRead": [],
       "denyRead": [".env*", "~/.ssh"],
@@ -12,5 +13,9 @@
       "allowedDomains": [],
       "deniedDomains": []
     }
+  },
+  "permissions": {
+    "allow": [],
+    "deny": []
   }
 }

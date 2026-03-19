@@ -2,6 +2,7 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
+    "excludedCommands": [],
     "filesystem": {
       "allowRead": [],
       "denyRead": [".env*"],
@@ -14,6 +15,7 @@
     }
   },
   "permissions": {
+    "allow": [],
     "deny": [
       "Read(.env*)",
       "Read(.claude/settings*)",

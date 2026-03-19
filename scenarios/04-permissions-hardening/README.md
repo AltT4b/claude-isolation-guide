@@ -1,10 +1,61 @@
 # Scenario 04 — Permissions Hardening
 
-The permissions system (`permissions.allow`, `permissions.deny`) controls what Claude's built-in tools can do — Read, Edit, Write, WebFetch, WebSearch, Bash, and MCP calls. It is the application-layer complement to the OS-level sandbox.
+Sandbox covers Bash. Permissions cover Claude's built-in tools (Read, Edit, WebFetch). You need both — this scenario closes the gaps between them.
 
-## Why It Matters
+## Config
 
-The sandbox only covers Bash. Without permissions rules:
+**`.claude/settings.json`** (project-level):
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": [".env*"],
+      "allowWrite": ["."],
+      "denyWrite": [".claude/"]
+    },
+    "network": { "allowedDomains": ["api.anthropic.com"] }
+  },
+  "permissions": {
+    "deny": [
+      "Read(.env*)", "Read(.claude/settings*)",
+      "Edit(.claude/settings*)", "Write(.claude/settings*)",
+      "WebFetch(*)"
+    ]
+  }
+}
+```
+
+**`.claude/settings.local.json`** (user-level, normally gitignored):
+```json
+{
+  "permissions": {
+    "allow": ["Bash(npm *)", "Bash(node *)", "Bash(git *)"]
+  }
+}
+```
+
+## Verify
+
+```bash
+npm install
+npm test
+```
+
+## What It Proves
+
+| Gap | Without permissions | With permissions |
+|---|---|---|
+| `Read .env` (Read tool) | **Open** — sandbox only blocks Bash | Blocked by `Read(.env*)` |
+| `WebFetch attacker.com` | **Open** — sandbox only blocks curl | Blocked by `WebFetch(*)` |
+| `Edit .claude/settings.json` | **Open** — Claude can weaken itself | Blocked by `Edit(.claude/settings*)` |
+
+---
+
+## Deep Dive
+
+### Why both layers
 
 | Action | Sandbox blocks it? | Permissions block it? |
 |---|---|---|
@@ -14,69 +65,7 @@ The sandbox only covers Bash. Without permissions rules:
 | WebFetch to `attacker.com` | **No** | Yes (`permissions.deny`) |
 | Edit `.claude/settings.json` | **No** | Yes (`permissions.deny`) |
 
-You need **both layers** for full coverage.
-
-## Quick Start
-
-```bash
-cd scenarios/04-permissions-hardening
-npm install
-npm test
-```
-
-## Setup
-
-### 1. Project-level settings (committed to git)
-
-`.claude/settings.json` — shared with the team:
-
-```json
-{
-  "sandbox": {
-    "enabled": true,
-    "allowUnsandboxedCommands": false,
-    "filesystem": {
-      "allowRead": [],
-      "denyRead": [".env*"],
-      "allowWrite": ["."],
-      "denyWrite": [".claude/"]
-    },
-    "network": {
-      "allowedDomains": ["api.anthropic.com"],
-      "deniedDomains": []
-    }
-  },
-  "permissions": {
-    "deny": [
-      "Read(.env*)",
-      "Read(.claude/settings*)",
-      "Edit(.claude/settings*)",
-      "Write(.claude/settings*)",
-      "WebFetch(*)"
-    ]
-  }
-}
-```
-
-### 2. User-level overrides (normally gitignored)
-
-`.claude/settings.local.json` — personal preferences that override project settings. In a real project this file would be gitignored; we commit it here so the tests work on clone:
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm *)",
-      "Bash(node *)",
-      "Bash(git *)"
-    ]
-  }
-}
-```
-
-### 3. Merge order
-
-Settings merge in this order (later wins):
+### Settings merge order
 
 1. **Default** — Claude's built-in defaults
 2. **Project** — `.claude/settings.json` (committed)
@@ -139,28 +128,13 @@ Without protection, Claude could Edit `.claude/settings.json` to weaken its own 
 }
 ```
 
-## Verify It Works
+### Manual testing (requires a live Claude session)
 
-```bash
-npm test
-```
-
-The test suite validates:
-- Sandbox blocks `cat .env.example` (Bash-level denyRead)
-- Sandbox blocks outbound network (Bash-level network filter)
-- Normal file operations within cwd succeed
-- `settings.json` contains the expected `permissions.deny` rules
-- `settings.local.json` contains the expected `permissions.allow` rules
-
-**Manual testing (requires a live Claude session):**
-
-To verify that permissions rules actually block Claude's tools, open a Claude Code session in this directory and try:
+Tool-level permissions can only be enforced inside a live Claude session, not via `srt`. Open Claude Code in this directory and try:
 
 1. Ask Claude to read `.env.example` — should be denied by `Read(.env*)` rule
 2. Ask Claude to edit `.claude/settings.json` — should be denied by `Edit(.claude/settings*)` rule
 3. Ask Claude to fetch an arbitrary URL — should be denied by `WebFetch(*)`
-
-These tool-level rules can only be enforced inside a live Claude session, not via `srt`.
 
 ## Gotchas
 

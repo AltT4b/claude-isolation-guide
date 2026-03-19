@@ -1,77 +1,39 @@
 # Scenario 10 — Combined Defense
 
-## What This Does
+The recommended production config: permissions + sandbox + container. Not a buffet — a sane default with documented knobs to loosen.
 
-One recommended configuration that layers permissions + sandbox + container for defense in depth. Not a buffet — a sane default with documented knobs to loosen.
+## Verify
 
-## Why It Matters
-
-Scenarios 01-09 teach individual mechanisms. Real security comes from combining them. Each layer catches what the others miss:
-
-- Permissions alone don't cover Bash commands
-- Sandbox alone doesn't cover Claude's built-in tools (Read, Edit, WebFetch)
-- Container alone doesn't restrict what Claude does inside the container
-
-This scenario shows how they compose.
-
-## Quick Start
-
-**Sandbox only** (no Docker required):
+### Sandbox only (no Docker required)
 
 ```bash
 # Copy the settings into your project
 cp -r .claude/ /path/to/your/project/.claude/
+
+# Run the config + sandbox verification tests
+npm install
+npm test
 ```
 
-**Sandbox + container**:
+### Sandbox + container
 
 ```bash
+# Build and start the hardened container
 docker compose up --build
+
+# Run container-level verification inside it
+docker compose run --rm claude node verify.js
 ```
 
-**Verify the configuration**:
+## The Three Layers (one sentence each)
 
-```bash
-npm install && npm test
-```
+1. **Permissions** — controls Claude's tools (Read, Edit, WebFetch). Catches: secret reads, web exfil, settings tampering.
+2. **Sandbox** — OS-level Bash restrictions. Catches: filesystem access outside cwd, network exfil via curl.
+3. **Container** — environment isolation. Catches: everything that escapes layers 1-2, resource abuse, privilege escalation.
 
-## The Three Layers
+Each layer catches what the others miss. You need all three for full coverage.
 
-```
-    ┌─────────────────────────────────────┐
-    │           Container                  │
-    │   ┌─────────────────────────────┐   │
-    │   │         Sandbox              │   │
-    │   │   ┌─────────────────────┐   │   │
-    │   │   │    Permissions       │   │   │
-    │   │   │                     │   │   │
-    │   │   │  Read · Edit · Web  │   │   │
-    │   │   └─────────────────────┘   │   │
-    │   │                             │   │
-    │   │  Bash · filesystem · net    │   │
-    │   └─────────────────────────────┘   │
-    │                                     │
-    │  process · mount · cgroup · caps    │
-    └─────────────────────────────────────┘
-```
-
-### Layer 1: Permissions (`settings.json` > `permissions`)
-
-Controls Claude's built-in tools — Read, Edit, Write, WebFetch. These tools run outside the sandbox, so they need their own rules.
-
-**Catches:** unauthorized file reads, arbitrary web requests, settings tampering.
-
-### Layer 2: Sandbox (`settings.json` > `sandbox`)
-
-OS-level Bash restrictions. Every command Claude runs through Bash goes through srt (the sandbox runtime).
-
-**Catches:** filesystem access outside cwd, network exfiltration via curl/wget, writes to sensitive paths.
-
-### Layer 3: Container (`Dockerfile` + `docker-compose.yml`)
-
-Environment isolation. The entire Claude Code session runs inside a locked-down container.
-
-**Catches:** anything that escapes Layers 1 and 2, resource abuse, privilege escalation.
+---
 
 ## The Config, Annotated
 
@@ -177,23 +139,6 @@ Environment isolation. The entire Claude Code session runs inside a locked-down 
 | Write to .claude/ | Remove from `denyWrite` | Settings tamper protection |
 | Write to secrets/ | Remove from `denyWrite` | Secret directory protection |
 | Additional CLI tools | Add to `permissions.allow` | Per-command approval for those tools |
-
-## Verify It Works
-
-```bash
-npm install && npm test
-```
-
-The verify script runs two types of checks:
-
-1. **Config validation** (tests 1-4) — parses settings.json and confirms all expected rules are present.
-2. **Sandbox enforcement** (tests 5-8) — runs commands through srt and confirms they are blocked or allowed as expected.
-
-For container validation, run:
-
-```bash
-docker compose up --build
-```
 
 ## Gotchas
 

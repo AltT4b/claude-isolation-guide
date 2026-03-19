@@ -20,13 +20,14 @@ The `.env.example` in this directory contains a fake secret (`API_KEY=sk-fake-12
 }
 ```
 
-## Quick Start
+## Verify
 
 ```bash
-npm install && npm test
+npm install
+npm test
 ```
 
-## Verify It Works
+## What You'll See
 
 | Test | Command | Expected | Why |
 |---|---|---|---|

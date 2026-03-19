@@ -8,9 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace
 
-COPY package*.json ./
-RUN npm install
-
 COPY . .
 
 USER node
