@@ -140,29 +140,28 @@ why("Sourcing them in CLAUDE_ENV_FILE causes silent failure on ALL commands.");
 // ---------------------------------------------------------------------------
 // Test 4: Login shell picks up env file
 // ---------------------------------------------------------------------------
-banner("Test 4 — Login Shell Picks Up Env File");
-info("Setting CLAUDE_ENV_FILE and using bash -l -c to source it.");
+banner("Test 4 — Login Shell Can Source Env File");
+info("Using bash -l -c to source the env file and verify it sets expected vars.");
 why("bash -l -c is the escape hatch when a tool isn't in PATH after installation.");
-why("It forces a fresh login shell that sources the env file.");
+why("It forces a fresh login shell that can source the env file.");
 
 {
-  const command = `CLAUDE_ENV_FILE="${goodEnvFile}" bash -l -c 'source "${goodEnvFile}" && echo "$PROJECT_ENV"'`;
-  cmd(`CLAUDE_ENV_FILE=... bash -l -c 'echo $PROJECT_ENV'`);
+  const command = `bash -l -c 'source "${goodEnvFile}" && echo "$PROJECT_ENV"'`;
+  cmd(`bash -l -c 'source "..." && echo "$PROJECT_ENV"'`);
   try {
     const output = execSync(command, {
       encoding: "utf8",
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, CLAUDE_ENV_FILE: goodEnvFile },
     }).trim();
     if (output === "sandbox-testing") {
-      pass(`Login shell returns PROJECT_ENV="${output}".`);
+      pass(`Login shell sources env file and returns PROJECT_ENV="${output}".`);
     } else {
       fail(`Login shell returned "${output}" — expected "sandbox-testing".`);
     }
   } catch (err) {
     const output = (err.stdout || "") + (err.stderr || "");
-    fail("Login shell failed to pick up env file.");
+    fail("Login shell failed to source env file.");
     console.log(`       Output: ${output.trim()}`);
   }
 }

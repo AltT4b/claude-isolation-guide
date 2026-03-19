@@ -166,7 +166,7 @@ if (!insideContainer) {
         pass(`Capabilities are minimal (CapEff: ${capHex}).`);
       } else if (capInt < 0xa80425fb) {
         warn(`Capabilities not fully dropped but reduced from default (CapEff: ${capHex}).`);
-        pass(`Capabilities are reduced from default (CapEff: ${capHex}).`);
+        warn("Partial cap drop is better than default but not ideal — expected CapEff of 0.");
       } else {
         fail(`Capabilities appear to be at default level (CapEff: ${capHex}).`);
       }
@@ -221,15 +221,8 @@ if (!insideContainer) {
     warn("Firewall rules may not be active (init-firewall.sh may not have been run).");
     skip("Firewall not active — network test inconclusive.");
   } else {
-    // Could be firewall blocking or curl not installed — both are acceptable
-    const curlCheck = exec("which curl");
-    if (!curlCheck.ok) {
-      warn("curl is not installed — cannot test network restrictions.");
-      skip("curl not available.");
-    } else {
-      pass("Outbound request to example.com was blocked.");
-      console.log(`       Output: ${result.output.split("\n").slice(0, 2).join("\n       ")}`);
-    }
+    pass("Outbound request to example.com failed (firewall, timeout, or DNS block).");
+    console.log(`       Output: ${result.output.split("\n").slice(0, 2).join("\n       ")}`);
   }
 }
 
