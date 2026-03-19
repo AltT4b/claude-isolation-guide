@@ -1,0 +1,21 @@
+services:
+  sandbox:
+    build: .
+    # -- Resource limits -------------------------------------------------------
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    # -- Security hardening ----------------------------------------------------
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=64m
+    # -- Network isolation -----------------------------------------------------
+    # Use 'none' to fully isolate, or define a custom network with firewall rules.
+    # For testing, we use the default bridge so verify.js network tests work.
+    network_mode: bridge
+    # -- Working directory -----------------------------------------------------
+    working_dir: /home/claude/project

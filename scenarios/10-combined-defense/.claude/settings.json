@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowWrite": ["."],
+      "denyRead": [".env*", "*.pem", "*.key"],
+      "denyWrite": [".claude/", "secrets/", ".git/hooks/"]
+    },
+    "network": {
+      "allowedDomains": [
+        "api.anthropic.com",
+        "registry.npmjs.org",
+        "pypi.org"
+      ]
+    },
+    "excludedCommands": ["docker", "docker-compose"]
+  },
+  "permissions": {
+    "deny": [
+      "Read(.env*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)"
+    ],
+    "allow": [
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(git *)",
+      "Bash(npx *)"
+    ]
+  }
+}

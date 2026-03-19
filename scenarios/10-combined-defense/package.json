@@ -1,0 +1,12 @@
+{
+  "name": "scenario-10-combined-defense",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capstone: combine permissions, sandbox, and container isolation into a single opinionated defense-in-depth configuration.",
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}
