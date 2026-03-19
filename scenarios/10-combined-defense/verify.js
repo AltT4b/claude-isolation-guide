@@ -78,7 +78,7 @@ const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
 
 function buildSrtSettings() {
   const s = settings.sandbox;
-  const cwd = process.cwd();
+  const cwd = __dirname;
   const home = os.homedir();
 
   const resolve = (p) =>
@@ -303,7 +303,7 @@ why("denyRead: [\".env*\"] should block all reads of files matching .env*.");
 why("This protects secrets in .env files from Bash-level exfiltration.");
 
 {
-  const command = `cat ${process.cwd()}/.env.example`;
+  const command = `cat ${__dirname}/.env.example`;
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {

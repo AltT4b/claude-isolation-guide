@@ -72,7 +72,7 @@ function buildSrtSettings() {
     fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
   );
   const s = settings.sandbox;
-  const cwd = process.cwd();
+  const cwd = __dirname;
   const home = os.homedir();
 
   const resolve = (p) =>
@@ -150,7 +150,7 @@ why("denyRead: [\".env*\"] should block all reads of files matching .env*.");
 why("This is the sandbox layer — it covers Bash but NOT the Read tool.");
 
 {
-  const command = `cat ${process.cwd()}/.env.example`;
+  const command = `cat ${__dirname}/.env.example`;
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {
