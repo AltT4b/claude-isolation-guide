@@ -86,14 +86,20 @@ function buildSrtSettings() {
   // Network passes through unchanged — no paths to resolve
   if (s.network) out.network = s.network;
 
-  // Filesystem needs path resolution
-  if (s.filesystem) {
-    out.filesystem = Object.fromEntries(
-      Object.entries(s.filesystem).map(([k, v]) =>
-        [k, Array.isArray(v) ? v.map(resolve) : v]
-      )
-    );
-  }
+  // Filesystem needs path resolution. If absent from settings.json, provide
+  // a sensible default so srt gets a valid config (it requires both network
+  // and filesystem keys).
+  const fs_section = s.filesystem || {
+    allowRead: [],
+    denyRead: [],
+    allowWrite: ["."],
+    denyWrite: [],
+  };
+  out.filesystem = Object.fromEntries(
+    Object.entries(fs_section).map(([k, v]) =>
+      [k, Array.isArray(v) ? v.map(resolve) : v]
+    )
+  );
 
   return out;
 }
