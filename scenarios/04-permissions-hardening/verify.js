@@ -72,7 +72,7 @@ function buildSrtSettings() {
     fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
   );
   const s = settings.sandbox;
-  const cwd = process.cwd();
+  const cwd = __dirname;
   const home = os.homedir();
 
   const resolve = (p) =>
@@ -150,7 +150,7 @@ why("denyRead: [\".env*\"] should block all reads of files matching .env*.");
 why("This is the sandbox layer — it covers Bash but NOT the Read tool.");
 
 {
-  const command = `cat ${process.cwd()}/.env.example`;
+  const command = `cat ${__dirname}/.env.example`;
   cmd(`srt "${command}"`);
   const result = sandboxExec(command);
   if (result.ok) {
@@ -203,7 +203,6 @@ why("This confirms the sandbox is not overly restrictive.");
   } else if (result.output.includes("not available") || result.output.includes("not installed")) {
     warn("Sandbox runtime (bwrap) not available in this environment — skipping.");
     warn("This test will pass when run on a system with bubblewrap installed.");
-    pass("Normal operations test skipped (sandbox not available).");
   } else {
     fail("Normal file operations within cwd failed — sandbox may be too restrictive.");
     console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);

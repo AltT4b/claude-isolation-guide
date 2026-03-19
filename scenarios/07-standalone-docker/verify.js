@@ -239,20 +239,21 @@ why("the volume mount is working correctly.");
 
 {
   cmd("ls package.json");
-  // Check for this scenario's own files as evidence of the mount
-  const checkFile = __filename; // verify.js itself
-  if (fs.existsSync(checkFile)) {
-    pass("Project files are accessible (verify.js found).");
-  } else {
-    fail("Project files not found — volume mount may not be configured.");
-  }
-
-  // Also check package.json
+  // Check for project files that only exist via the host mount.
+  // Note: we do NOT check __filename (verify.js) because the running script
+  // must exist or we wouldn't be here — that's tautological.
   const pkgPath = require("path").join(__dirname, "package.json");
   if (fs.existsSync(pkgPath)) {
-    pass("package.json is accessible.");
+    pass("package.json is accessible — volume mount is working.");
   } else {
-    fail("package.json not found in project directory.");
+    fail("package.json not found — volume mount may not be configured.");
+  }
+
+  const dockerfilePath = require("path").join(__dirname, "Dockerfile");
+  if (fs.existsSync(dockerfilePath)) {
+    pass("Dockerfile is accessible — volume mount confirmed.");
+  } else {
+    fail("Dockerfile not found in project directory.");
   }
 }
 

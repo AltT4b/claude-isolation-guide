@@ -72,7 +72,7 @@ function buildSrtSettings() {
     fs.readFileSync(path.join(__dirname, ".claude", "settings.json"), "utf8")
   );
   const s = settings.sandbox;
-  const cwd = process.cwd();
+  const cwd = __dirname;
   const home = os.homedir();
 
   const resolve = (p) =>

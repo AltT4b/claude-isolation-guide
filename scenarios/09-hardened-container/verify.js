@@ -227,8 +227,8 @@ why("Attackers often drop payloads to /tmp and execute them. noexec blocks this.
       if (/permission denied|operation not permitted|cannot execute/i.test(stderr)) {
         pass("Execution from /tmp denied — noexec is enforced.");
       } else {
-        // The script failed for some reason — check if it's exec-related
-        pass("Execution from /tmp failed (likely noexec).");
+        warn(`Execution from /tmp failed with unexpected error: ${stderr || "(no stderr)"}`);
+        warn("Cannot confirm noexec — error may be unrelated (missing shell, timeout, etc.).");
         if (stderr) {
           console.log(`       stderr: ${stderr.split("\n").slice(0, 2).join("\n       ")}`);
         }

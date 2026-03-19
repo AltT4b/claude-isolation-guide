@@ -78,7 +78,7 @@ const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
 
 function buildSrtSettings() {
   const s = settings.sandbox;
-  const cwd = process.cwd();
+  const cwd = __dirname;
   const home = os.homedir();
 
   const resolve = (p) =>
@@ -104,6 +104,9 @@ function buildSrtSettings() {
   return out;
 }
 
+// -- Build settings once ----------------------------------------------------
+const srtSettings = buildSrtSettings();
+
 // -- Sandbox execution ------------------------------------------------------
 
 function sandboxExec(command) {
@@ -124,9 +127,6 @@ function sandboxExec(command) {
     try { fs.unlinkSync(settingsPath); } catch {}
   }
 }
-
-// -- Build settings once ----------------------------------------------------
-const srtSettings = buildSrtSettings();
 
 // ===========================================================================
 // PART 1: Config Validation
@@ -303,14 +303,23 @@ why("denyRead: [\".env*\"] should block all reads of files matching .env*.");
 why("This protects secrets in .env files from Bash-level exfiltration.");
 
 {
-  const command = `cat ${process.cwd()}/.env.example`;
-  cmd(`srt "${command}"`);
-  const result = sandboxExec(command);
-  if (result.ok) {
-    fail("Read of .env.example succeeded — denyRead may not be working.");
+  const envExamplePath = path.join(__dirname, ".env.example");
+  if (!fs.existsSync(envExamplePath)) {
+    warn("Fixture file .env.example is missing — cannot test denyRead enforcement.");
+    fail("Missing .env.example fixture. Create one so this test can verify sandbox denial.");
   } else {
-    pass("Read of .env.example was denied by the sandbox.");
-    console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
+    const command = `cat ${__dirname}/.env.example`;
+    cmd(`srt "${command}"`);
+    const result = sandboxExec(command);
+    if (result.ok) {
+      fail("Read of .env.example succeeded — denyRead may not be working.");
+    } else if (/No such file or directory/.test(result.output)) {
+      warn("Sandbox command got 'No such file or directory' — fixture may not be visible inside sandbox.");
+      fail("Read failed due to missing file, not sandbox denial.");
+    } else {
+      pass("Read of .env.example was denied by the sandbox.");
+      console.log(`       Output: ${result.output.split("\n").slice(0, 3).join("\n       ")}`);
+    }
   }
 }
 
