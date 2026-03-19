@@ -1,16 +1,16 @@
 # Scenario 01 — Native Sandbox Basics
 
-Proves the sandbox is active: Bash commands can't write outside the project directory, can't reach the network, and normal operations still work.
+The simplest proof the sandbox works: watch it block writes outside your project and outbound network, while leaving normal operations untouched.
 
 ## Config
 
-```json
+```jsonc
 {
   "sandbox": {
-    "enabled": true,
-    "allowUnsandboxedCommands": false,
-    "network": { "allowedDomains": ["api.anthropic.com"] },
-    "filesystem": { "allowWrite": ["."] }
+    "enabled": true,                           // activate OS-level sandboxing
+    "allowUnsandboxedCommands": false,         // no fallback — only excludedCommands bypass
+    "network": { "allowedDomains": ["api.anthropic.com"] },  // only Anthropic API allowed
+    "filesystem": { "allowWrite": ["."] }      // writes allowed anywhere in project dir
   }
 }
 ```
@@ -24,11 +24,19 @@ npm test
 
 ## What You'll See
 
-| Test | Command | Expected |
-|---|---|---|
-| Write outside cwd | `touch /tmp/...` | Denied |
-| Outbound network | `curl https://example.com` | Denied |
-| Normal file ops | write/read/delete inside cwd | Succeeds |
+| Test | Command | Expected | Why |
+|---|---|---|---|
+| Write outside cwd | `touch /tmp/...` | Denied | Not in `allowWrite` |
+| Outbound network | `curl https://example.com` | Denied | Not in `allowedDomains` |
+| Normal file ops | write/read/delete inside cwd | Succeeds | `allowWrite` includes `.` |
+
+```
+PASS — Write to /tmp was denied by the sandbox.
+PASS — Outbound request to example.com was blocked.
+PASS — Write/read/delete within cwd succeeded.
+
+Passed: 3 / 3
+```
 
 ## Next Steps
 

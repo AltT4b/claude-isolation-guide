@@ -5,33 +5,33 @@ Sandbox covers Bash. Permissions cover Claude's built-in tools (Read, Edit, WebF
 ## Config
 
 **`.claude/settings.json`** (project-level):
-```json
+```jsonc
 {
   "sandbox": {
-    "enabled": true,
-    "allowUnsandboxedCommands": false,
+    "enabled": true,                           // activate OS-level sandboxing
+    "allowUnsandboxedCommands": false,         // no fallback — only excludedCommands bypass
     "filesystem": {
-      "denyRead": [".env*"],
-      "allowWrite": ["."],
-      "denyWrite": [".claude/"]
+      "denyRead": [".env*"],                   // block Bash reads of secrets
+      "allowWrite": ["."],                     // writes allowed anywhere in project dir
+      "denyWrite": [".claude/"]                // protect settings from Bash modification
     },
-    "network": { "allowedDomains": ["api.anthropic.com"] }
+    "network": { "allowedDomains": ["api.anthropic.com"] }  // only Anthropic API allowed
   },
   "permissions": {
     "deny": [
-      "Read(.env*)", "Read(.claude/settings*)",
-      "Edit(.claude/settings*)", "Write(.claude/settings*)",
-      "WebFetch(*)"
+      "Read(.env*)", "Read(.claude/settings*)",       // close the Read-tool gap
+      "Edit(.claude/settings*)", "Write(.claude/settings*)",  // prevent settings tampering
+      "WebFetch(*)"                                    // close the WebFetch gap
     ]
   }
 }
 ```
 
 **`.claude/settings.local.json`** (user-level, normally gitignored):
-```json
+```jsonc
 {
   "permissions": {
-    "allow": ["Bash(npm *)", "Bash(node *)", "Bash(git *)"]
+    "allow": ["Bash(npm *)", "Bash(node *)", "Bash(git *)"]  // auto-approve common commands
   }
 }
 ```
@@ -43,19 +43,7 @@ npm install
 npm test
 ```
 
-## What It Proves
-
-| Gap | Without permissions | With permissions |
-|---|---|---|
-| `Read .env` (Read tool) | **Open** — sandbox only blocks Bash | Blocked by `Read(.env*)` |
-| `WebFetch attacker.com` | **Open** — sandbox only blocks curl | Blocked by `WebFetch(*)` |
-| `Edit .claude/settings.json` | **Open** — Claude can weaken itself | Blocked by `Edit(.claude/settings*)` |
-
----
-
-## Deep Dive
-
-### Why both layers
+## What You'll See
 
 | Action | Sandbox blocks it? | Permissions block it? |
 |---|---|---|
@@ -64,6 +52,21 @@ npm test
 | `curl attacker.com` (Bash) | Yes (`allowedDomains`) | N/A |
 | WebFetch to `attacker.com` | **No** | Yes (`permissions.deny`) |
 | Edit `.claude/settings.json` | **No** | Yes (`permissions.deny`) |
+
+```
+PASS — Read of .env.example was denied by the sandbox.
+PASS — Outbound request to example.com was blocked.
+PASS — Write/read/delete within cwd succeeded.
+PASS — permissions.deny includes "Read(.env*)".
+PASS — permissions.deny includes "WebFetch(*)".
+PASS — permissions.allow includes "Bash(npm *)".
+
+Passed: 11 / 11
+```
+
+---
+
+## Deep Dive
 
 ### Settings merge order
 
@@ -77,7 +80,7 @@ A user can `allow` something the project `deny`s. For team-wide enforcement that
 
 ### Gap 1: Read tool bypasses `denyRead`
 
-Scenario 02 showed that `sandbox.filesystem.denyRead: [".env*"]` blocks `cat .env`. But the Read tool is not a Bash command — it operates outside the sandbox.
+Scenario 02 showed that `denyRead` blocks `cat .env`. But the Read tool is not a Bash command — it operates outside the sandbox.
 
 **The gap:**
 ```
@@ -86,17 +89,15 @@ Read:  Read(.env.example)  → NOT blocked (sandbox doesn't cover Read tool)
 ```
 
 **The fix:**
-```json
+```jsonc
 "permissions": {
-  "deny": ["Read(.env*)"]
+  "deny": ["Read(.env*)"]  // now both layers block .env access
 }
 ```
 
-Now both layers block `.env` access.
-
 ### Gap 2: WebFetch bypasses `allowedDomains`
 
-The sandbox network filter blocks `curl attacker.com` but WebFetch is a built-in tool, not a Bash command.
+The sandbox blocks `curl attacker.com` but WebFetch is a built-in tool, not a Bash command.
 
 **The gap:**
 ```
@@ -105,32 +106,36 @@ WebFetch:  WebFetch(*)        → NOT blocked (sandbox doesn't cover WebFetch)
 ```
 
 **The fix:**
-```json
+```jsonc
 "permissions": {
-  "deny": ["WebFetch(*)"]
+  "deny": ["WebFetch(*)"]  // or selectively allow specific domains
 }
 ```
-
-Or selectively allow specific domains and deny everything else.
 
 ### Gap 3: Settings tampering
 
 Without protection, Claude could Edit `.claude/settings.json` to weaken its own restrictions.
 
+**The gap:**
+```
+Edit:   Edit(.claude/settings.json)  → NOT blocked (no default protection)
+Write:  Write(.claude/settings.json) → NOT blocked
+```
+
 **The fix:**
-```json
+```jsonc
 "permissions": {
   "deny": [
-    "Read(.claude/settings*)",
-    "Edit(.claude/settings*)",
-    "Write(.claude/settings*)"
+    "Read(.claude/settings*)",   // prevent reading config
+    "Edit(.claude/settings*)",   // prevent editing config
+    "Write(.claude/settings*)"   // prevent overwriting config
   ]
 }
 ```
 
 ### Manual testing (requires a live Claude session)
 
-Tool-level permissions can only be enforced inside a live Claude session, not via `srt`. Open Claude Code in this directory and try:
+Tool-level permissions can only be enforced inside a live Claude session, not via srt (sandbox runtime — the CLI that enforces sandbox rules outside a live Claude session). Open Claude Code in this directory and try:
 
 1. Ask Claude to read `.env.example` — should be denied by `Read(.env*)` rule
 2. Ask Claude to edit `.claude/settings.json` — should be denied by `Edit(.claude/settings*)` rule
@@ -138,8 +143,6 @@ Tool-level permissions can only be enforced inside a live Claude session, not vi
 
 ## Gotchas
 
-- **Permissions are not sandbox.** Permissions control Claude's tools; sandbox controls Bash. You need both for full coverage.
-- **Merge order matters.** `settings.local.json` overrides `settings.json`. A user can `allow` something the project `deny`s. For team enforcement, use managed settings (out of scope here).
 - **Glob patterns vary.** `Read(.env*)` uses tool-call matching, not filesystem globs. Test your patterns.
 - **`autoAllowBashIfSandboxed`** — when sandbox is on, Bash commands auto-approve. Permissions `deny` rules for Bash still apply (they are checked before auto-allow).
 - **MCP server permissions** — MCP tools show up as `mcp__servername__toolname()`. You can deny specific MCP tools the same way.
