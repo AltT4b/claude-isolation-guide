@@ -45,7 +45,7 @@ PASS — Write to secrets/ was denied by the sandbox.
 PASS — Write to /tmp was denied by the sandbox.
 PASS — Read of README.md succeeded.
 
-Passed: 5 / 5
+Passed: 6 / 6
 ```
 
 **Not tested:** the Read-vs-Bash gap (requires a live Claude session, not srt (sandbox runtime — the CLI that enforces sandbox rules outside a live Claude session)).

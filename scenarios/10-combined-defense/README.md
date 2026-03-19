@@ -107,8 +107,8 @@ docker compose run --rm claude node verify.js
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Summary
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Passed: 14 / 14
-  Failed: 0 / 14
+  Passed: 22 / 22
+  Failed: 0 / 22
 ```
 
 ## Loosening Knobs

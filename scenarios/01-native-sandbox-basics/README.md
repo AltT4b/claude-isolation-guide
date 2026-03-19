@@ -35,7 +35,7 @@ PASS — Write to /tmp was denied by the sandbox.
 PASS — Outbound request to example.com was blocked.
 PASS — Write/read/delete within cwd succeeded.
 
-Passed: 3 / 3
+Passed: 4 / 4
 ```
 
 ## Next Steps

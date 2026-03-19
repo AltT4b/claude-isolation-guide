@@ -26,8 +26,6 @@ docker run -it --rm \
 ## Verify
 
 ```bash
-npm install
-
 docker run --rm \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \

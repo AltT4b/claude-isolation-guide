@@ -41,7 +41,7 @@ PASS — Request to example.com was blocked.
 PASS — Request to icanhazip.com was blocked.
 PASS — Request to localhost was blocked (not in allowedDomains).
 
-Passed: 4 / 4
+Passed: 5 / 5
 ```
 
 ---

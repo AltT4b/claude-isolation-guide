@@ -61,7 +61,7 @@ PASS — permissions.deny includes "Read(.env*)".
 PASS — permissions.deny includes "WebFetch(*)".
 PASS — permissions.allow includes "Bash(npm *)".
 
-Passed: 11 / 11
+Passed: 12 / 12
 ```
 
 ---
