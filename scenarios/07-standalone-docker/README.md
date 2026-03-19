@@ -72,6 +72,7 @@ docker run --rm \
   --tmpfs /home/claude/.npm:rw,size=128m \
   -v "$(pwd):/home/claude/project:rw" \
   --entrypoint node \
+  -w /home/claude/project \
   claude-sandbox verify.js
 ```
 
