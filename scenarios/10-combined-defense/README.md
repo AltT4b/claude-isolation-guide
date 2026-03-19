@@ -143,13 +143,14 @@ Environment isolation. The entire Claude Code session runs inside a locked-down 
       "Read(*.pem)",
       "Read(*.key)",
       "Edit(.claude/settings*)",
-      "Write(.claude/settings*)"
+      "Write(.claude/settings*)",
+      "WebFetch(*)"
     ],
 ```
 
 > `permissions.deny` — blocks Claude's built-in tools (Read, Edit, Write) from accessing these paths.
 > These tools run outside the sandbox, so denyRead alone is not enough.
-> **Blocks:** Claude reading secrets via the Read tool, tampering with its own settings.
+> **Blocks:** Claude reading secrets via the Read tool, tampering with its own settings, arbitrary web requests via WebFetch.
 
 ```json
     "allow": [
