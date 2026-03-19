@@ -3,10 +3,14 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "network": {
-      "allowedDomains": ["api.anthropic.com"]
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": []
     },
     "filesystem": {
-      "allowWrite": ["."]
+      "allowRead": [],
+      "denyRead": [],
+      "allowWrite": ["."],
+      "denyWrite": []
     }
   }
 }

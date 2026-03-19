@@ -4,7 +4,7 @@
   "private": true,
   "description": "Verify that Claude Code's OS-level sandbox is active and working.",
   "scripts": {
-    "test": "./verify.sh"
+    "test": "node verify.js"
   },
   "devDependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.42"
