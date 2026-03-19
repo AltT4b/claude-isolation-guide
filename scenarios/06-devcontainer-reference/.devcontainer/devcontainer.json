@@ -1,0 +1,17 @@
+{
+  "name": "Claude Code Sandbox - Devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {},
+  "postCreateCommand": "npm install",
+  "initializeCommand": "",
+  "remoteUser": "node",
+  "runArgs": [
+    "--cap-drop=ALL",
+    "--cap-add=NET_BIND_SERVICE",
+    "--security-opt=no-new-privileges",
+    "--read-only",
+    "--tmpfs=/tmp:rw,noexec,nosuid"
+  ]
+}
