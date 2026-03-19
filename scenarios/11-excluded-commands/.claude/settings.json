@@ -1,0 +1,10 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker", "docker-compose"],
+    "network": {
+      "allowedDomains": ["api.anthropic.com"]
+    }
+  }
+}

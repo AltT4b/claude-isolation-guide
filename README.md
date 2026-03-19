@@ -230,15 +230,12 @@ Run Claude Code inside a plain Docker container with security defaults — no de
 - **tmpfs is writable but noexec** — write to `/tmp` works, execute from `/tmp` fails.
 - **Project volume mounted** — project files are accessible.
 
-### 08 — [Docker Sandboxes](scenarios/08-docker-sandboxes/)
+### 08 — [Docker AI Sandboxes](scenarios/08-docker-sandboxes/)
 
-Explains the interaction between Claude Code's native sandbox and Docker: why Docker commands fail in the sandbox, how `excludedCommands` works as a prefix-match carve-out, and the tradeoffs of running both together. Tests validate:
+Run Claude Code inside a Docker AI Sandbox — a microVM managed by Docker Desktop that provides full environment isolation (filesystem, network, process) with zero configuration. Tests check prerequisites:
 
-- **Sandbox enabled** — `enabled: true` in settings.json.
-- **`excludedCommands` configured** — `docker` is in the exclusion list.
-- **`allowUnsandboxedCommands` is false** — non-excluded commands stay sandboxed.
-- **Non-docker commands sandboxed** — `curl example.com` is still blocked by the sandbox.
 - **Docker available** — `docker --version` confirms Docker is installed.
+- **Docker sandbox CLI** — `docker sandbox --help` confirms Docker Desktop supports AI Sandboxes.
 
 ### 09 — [Hardened Container](scenarios/09-hardened-container/)
 
@@ -258,3 +255,13 @@ The capstone: one recommended configuration layering permissions + sandbox + con
 
 - **Config validation (tests 1-4)** — parses settings.json and confirms all expected rules are present across permissions, sandbox filesystem, sandbox network, and excluded commands.
 - **Sandbox enforcement (tests 5-8)** — runs commands through srt and confirms they are blocked or allowed as expected.
+
+### 11 — [Excluded Commands](scenarios/11-excluded-commands/)
+
+Explains `excludedCommands` — the prefix-match carve-out that lets specific commands (like Docker) bypass the sandbox while keeping everything else sandboxed. Covers the tradeoffs of running sandbox + Docker together. Tests validate:
+
+- **Sandbox enabled** — `enabled: true` in settings.json.
+- **`excludedCommands` configured** — `docker` is in the exclusion list.
+- **`allowUnsandboxedCommands` is false** — non-excluded commands stay sandboxed.
+- **Non-docker commands sandboxed** — `curl example.com` is still blocked by the sandbox.
+- **Docker available** — `docker --version` confirms Docker is installed.

@@ -97,5 +97,5 @@ The script checks six things:
 
 ## Next Steps
 
-- **[Scenario 08 — Docker Sandboxes](../08-docker-sandboxes/):** Use Docker as the sandbox runtime for Claude Code.
+- **[Scenario 08 — Docker AI Sandboxes](../08-docker-sandboxes/):** Run Claude Code inside a Docker AI Sandbox — a microVM managed by Docker Desktop that provides full environment isolation.
 - **[Scenario 09 — Hardened Container](../09-hardened-container/):** Docker Compose with network policies, seccomp profiles, and AppArmor.
