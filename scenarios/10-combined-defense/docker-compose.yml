@@ -2,9 +2,14 @@ services:
   sandbox:
     build: .
     # -- Resource limits -------------------------------------------------------
-    mem_limit: 512m
-    cpus: 1.0
-    pids_limit: 256
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 256
+        reservations:
+          memory: 256M
     # -- Security hardening ----------------------------------------------------
     read_only: true
     security_opt:
