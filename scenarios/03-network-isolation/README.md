@@ -109,7 +109,7 @@ Start Claude in this directory, then try:
 - **Subdomains.** Use `"*.example.com"` wildcard syntax to match subdomains. A bare `"example.com"` may not match `sub.example.com`.
 - **WebFetch/WebSearch are separate.** Sandbox network rules don't apply to Claude's built-in tools. This is by design — the sandbox isolates Bash, not Claude itself.
 - **localhost is not special.** It's treated like any other domain — if it's not in `allowedDomains`, Bash can't reach it. This matters for Docker containers exposing ports on localhost.
-- **Docker needs `excludedCommands`.** `docker` is incompatible with the sandbox. Add it to `sandbox.excludedCommands` if you need Docker access. If you also allowlist `/var/run/docker.sock` via `allowUnixSockets`, that effectively grants host-level access — be intentional.
+- **Docker needs `excludedCommands`.** `docker` is incompatible with the sandbox. Add it to `sandbox.excludedCommands` if you need Docker access. If you also allowlist `/var/run/docker.sock` via `allowUnixSockets`, that effectively grants host-level access — be intentional. See [Scenario 11 — Excluded Commands](../11-excluded-commands/) for the full tradeoff analysis.
 - **Go-based tools + TLS (macOS).** Tools like `gh`, `gcloud`, and `terraform` use Go's TLS stack, which may fail certificate verification behind the sandbox proxy. The `enableWeakerNetworkIsolation` flag works around this but reduces security.
 - **Domain fronting.** The proxy filters by domain name, not content. Domain fronting can bypass network filtering — a known limitation with no current mitigation.
 
