@@ -1,0 +1,12 @@
+{
+  "name": "scenario-04-permissions-hardening",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstrate how permissions.deny closes the gaps that the sandbox alone leaves open (Read tool, Edit tool, WebFetch).",
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}

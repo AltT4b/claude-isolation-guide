@@ -1,0 +1,24 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowRead": [],
+      "denyRead": [".env*"],
+      "allowWrite": ["."],
+      "denyWrite": [".claude/"]
+    },
+    "network": {
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": []
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(.env*)",
+      "Read(.claude/settings*)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)"
+    ]
+  }
+}
