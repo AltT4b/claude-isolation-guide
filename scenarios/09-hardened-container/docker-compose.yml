@@ -41,7 +41,7 @@ services:
 
     # --- Network ---
     # Isolated bridge network. Add firewall rules for outbound
-    # restrictions if needed.
+    # restrictions if needed. See scenario 03 for outbound network filtering.
     networks:
       - claude-net
 

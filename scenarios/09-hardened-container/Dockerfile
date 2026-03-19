@@ -1,14 +1,15 @@
-FROM node:20-slim AS base
+FROM node:20-slim
 
+# Security: minimal system deps only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*    # shrink image layer
 
-# Install Claude Code
+# Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user with minimal permissions
+# Security: non-root user (UID 1001 matches compose expectations)
 RUN useradd -m -s /bin/bash -u 1001 claude \
     && mkdir -p /home/claude/project \
     && chown -R claude:claude /home/claude
@@ -16,4 +17,4 @@ RUN useradd -m -s /bin/bash -u 1001 claude \
 USER claude
 WORKDIR /home/claude/project
 
-ENTRYPOINT ["claude"]
+CMD ["claude"]
