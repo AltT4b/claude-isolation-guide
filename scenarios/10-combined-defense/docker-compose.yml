@@ -17,7 +17,7 @@ services:
     cap_drop:
       - ALL
     tmpfs:
-      - /tmp:size=64m
+      - /tmp:rw,noexec,nosuid,size=256m
     # -- Network isolation -----------------------------------------------------
     # Use 'none' to fully isolate, or define a custom network with firewall rules.
     # For testing, we use the default bridge so verify.js network tests work.
