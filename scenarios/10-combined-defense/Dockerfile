@@ -17,6 +17,8 @@ RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
 
 COPY . .
 
+RUN chown -R claude:claude /home/claude/project
+
 # -- Drop to non-root ----------------------------------------------------------
 USER claude
 
