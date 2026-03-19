@@ -89,5 +89,5 @@ Running outside a container is fine — tests SKIP gracefully instead of failing
 
 ## Next Steps
 
-- **Scenario 07** — Docker Compose patterns for multi-container setups
-- **Scenario 09** — Production hardening and orchestration
+- **[Scenario 07 — Standalone Docker](../07-standalone-docker/)** — Run Claude Code in a plain Docker container
+- **[Scenario 09 — Hardened Container](../09-hardened-container/)** — Docker Compose with full security hardening
