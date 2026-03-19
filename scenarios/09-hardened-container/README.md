@@ -2,6 +2,33 @@
 
 Run Claude Code inside a fully hardened Docker container with defense in depth: every reasonable Docker security control applied, layered on top of Claude Code's native sandbox and permissions system.
 
+## Quick Start
+
+```bash
+# Build the hardened container
+docker compose build
+
+# Run the verification tests
+docker compose run --rm claude node verify.js
+```
+
+To use this container with Claude Code, pass your API key at runtime (e.g., `ANTHROPIC_API_KEY=... docker compose run --rm claude`). The verification tests above prove the security model without requiring any credentials.
+
+## What You'll See
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Test 1 — Running Inside Container
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASS — /.dockerenv exists — running inside a Docker container.
+  ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Passed: 7 / 7
+  Failed: 0 / 7
+```
+
 ## What This Does
 
 A `Dockerfile` + `docker-compose.yml` that applies every reasonable Docker security control:
@@ -16,7 +43,7 @@ A `Dockerfile` + `docker-compose.yml` that applies every reasonable Docker secur
 
 ## Why It Matters
 
-Scenarios 06-08 introduce container isolation incrementally. This scenario is the fully hardened reference — what you'd actually deploy for untrusted workloads or high-security environments.
+This scenario is the fully hardened Docker reference — the baseline for untrusted workloads.
 
 No single security control is perfect. Each can be bypassed in isolation. The value is in layering them so an attacker must bypass *all* of them simultaneously.
 
@@ -62,109 +89,23 @@ Three independent layers protect your environment. A threat must bypass all thre
 | Resource exhaustion (fork bomb) | N/A | N/A | Memory/CPU limits enforced |
 | Data exfiltration via DNS | N/A | Blocks non-allowed domains | Network isolation |
 
-## Quick Start
-
-```bash
-# Build the hardened container
-docker compose build
-
-# Run the verification tests
-docker compose run --rm claude node verify.js
-```
-
-To use this container with Claude Code, pass your API key at runtime (e.g., `ANTHROPIC_API_KEY=... docker compose run --rm claude`). The verification tests above prove the security model without requiring any credentials.
-
 ## Setup — docker-compose.yml Walkthrough
 
-### Capabilities
+See the inline comments in `docker-compose.yml` for a detailed walkthrough of each security control.
 
-```yaml
-cap_drop:
-  - ALL
-```
+Key sections:
 
-Linux capabilities are fine-grained root powers. By default, Docker grants containers a subset (e.g., `cap_chown`, `cap_net_bind_service`). Dropping ALL means the process cannot bind privileged ports, change file ownership, load kernel modules, or use raw sockets — even if it somehow becomes root.
-
-### Privilege Escalation
-
-```yaml
-security_opt:
-  - no-new-privileges:true
-```
-
-This sets the `NoNewPrivs` flag on all processes. Even if a setuid binary exists in the container (like `su` or `sudo`), executing it won't grant elevated privileges. This closes a common escalation path.
-
-### Read-Only Filesystem
-
-```yaml
-read_only: true
-tmpfs:
-  - /tmp:rw,noexec,nosuid,size=256m
-  - /home/claude/.npm:rw,size=128m
-  - /home/claude/.config:rw,size=64m
-```
-
-The root filesystem is mounted read-only. An attacker cannot install backdoors, modify system binaries, or tamper with configuration files. Specific directories are mounted as tmpfs (in-memory) for scratch space:
-
-- `/tmp` — general scratch, but with `noexec` (no executing binaries) and `nosuid`
-- `.npm` — npm cache needs to be writable
-- `.config` — Claude Code stores configuration here
-
-### Resource Limits
-
-```yaml
-deploy:
-  resources:
-    limits:
-      cpus: "2.0"
-      memory: 4G
-    reservations:
-      memory: 1G
-```
-
-Prevents a compromised or runaway process from exhausting host resources. A fork bomb or memory leak is contained to 4GB and 2 CPUs. The reservation ensures the container gets at least 1GB even under host memory pressure.
-
-### Network
-
-```yaml
-networks:
-  - claude-net
-```
-
-An isolated bridge network. The container can reach the internet (for API calls) but is on its own network segment. Add iptables rules or a proxy for outbound filtering.
-
-### Environment
-
-```yaml
-environment:
-  - ANTHROPIC_API_KEY
-```
-
-The API key is passed through from the host environment — it is never stored in `docker-compose.yml` or the image. Set it in your shell before running `docker compose`.
-
-### Volumes
-
-```yaml
-volumes:
-  - ./project:/home/claude/project:rw
-```
-
-Only the project directory is mounted. Claude Code can read and write project files but has no access to the rest of the host filesystem.
-
-### Interactive Use
-
-```yaml
-stdin_open: true
-tty: true
-```
-
-Required for Claude Code's interactive terminal interface.
+- **Capabilities** — `cap_drop: [ALL]` removes all Linux capabilities
+- **Privilege escalation** — `no-new-privileges:true` blocks setuid/setgid
+- **Read-only filesystem** — `read_only: true` with tmpfs mounts for `/tmp`, `.npm`, `.config`
+- **Resource limits** — 2 CPUs, 4GB memory, 1GB reservation
+- **Network** — isolated bridge network (see scenario 03 for outbound network filtering)
+- **Volumes** — only `./project` is mounted; no host filesystem access
+- **Interactive use** — `stdin_open: true` and `tty: true` are required. Without them, Claude Code's terminal prompts freeze and keyboard input isn't read.
 
 ## Verify It Works
 
-```bash
-docker compose run --rm claude node verify.js
-```
+The verification command from Quick Start (`docker compose run --rm claude node verify.js`) checks:
 
 | Test | What it checks | Expected |
 |---|---|---|
@@ -186,9 +127,7 @@ docker compose run --rm claude node verify.js
 
 - **AppArmor/SELinux profiles are host-dependent.** These provide additional mandatory access control but are too platform-specific for a portable scenario.
 
-- **Memory limits can cause OOMs.** Claude Code + language servers can be memory-hungry. 4G is a starting point — adjust based on your workload. Watch `docker stats` during use.
-
-- **This is the container hardening reference, not the full defense recommendation.** This scenario focuses on Docker-level controls. Scenario 10 combines this with sandbox and permissions configuration for the complete recommended setup.
+- **Claude Code can be memory-hungry.** 4G is a starting point — watch `docker stats` during use.
 
 ## Next Steps
 
