@@ -15,16 +15,20 @@ Proves the sandbox is active: Bash commands can't write outside the project dire
 }
 ```
 
-## Run it
+## Quick Start
 
 ```bash
 npm install && npm test
 ```
 
-## What the tests check
+## Verify It Works
 
 | Test | Command | Expected |
 |---|---|---|
 | Write outside cwd | `touch /tmp/...` | Denied |
 | Outbound network | `curl https://example.com` | Denied |
 | Normal file ops | write/read/delete inside cwd | Succeeds |
+
+## Next Steps
+
+- **[Scenario 02 — Filesystem Controls](../02-filesystem-controls/):** Fine-grained read/write rules with `denyRead` and `denyWrite`.

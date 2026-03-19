@@ -20,13 +20,13 @@ The `.env.example` in this directory contains a fake secret (`API_KEY=sk-fake-12
 }
 ```
 
-## Run it
+## Quick Start
 
 ```bash
 npm install && npm test
 ```
 
-## What the tests check
+## Verify It Works
 
 | Test | Command | Expected | Why |
 |---|---|---|---|
@@ -38,3 +38,7 @@ npm install && npm test
 | Read ~/.ssh/id_rsa | `cat ~/.ssh/id_rsa` | Denied | `denyRead` includes `~/.ssh` |
 
 **Not tested:** the Read-vs-Bash gap (requires a live Claude session, not `srt`).
+
+## Next Steps
+
+- **[Scenario 03 — Network Isolation](../03-network-isolation/):** Control outbound network access with domain allowlists.
