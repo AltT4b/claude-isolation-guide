@@ -173,5 +173,5 @@ These tool-level rules can only be enforced inside a live Claude session, not vi
 
 ## Next Steps
 
-- **Scenario 05** — MCP server controls
-- **Scenario 10** — Putting it all together
+- **[Scenario 05 — Environment Persistence](../05-env-persistence/)** — `CLAUDE_ENV_FILE` and persistent environment setup
+- **[Scenario 10 — Combined Defense](../10-combined-defense/)** — Putting it all together

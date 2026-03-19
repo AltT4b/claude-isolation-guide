@@ -3,9 +3,19 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "allowWrite": ["."],
-      "denyRead": [".env*", "*.pem", "*.key"],
-      "denyWrite": [".claude/", "secrets/", ".git/hooks/"]
+      "allowWrite": [
+        "."
+      ],
+      "denyRead": [
+        ".env*",
+        "*.pem",
+        "*.key"
+      ],
+      "denyWrite": [
+        ".claude/",
+        "secrets/",
+        ".git/hooks/"
+      ]
     },
     "network": {
       "allowedDomains": [
@@ -14,7 +24,10 @@
         "pypi.org"
       ]
     },
-    "excludedCommands": ["docker", "docker-compose"]
+    "excludedCommands": [
+      "docker",
+      "docker-compose"
+    ]
   },
   "permissions": {
     "deny": [
@@ -22,7 +35,8 @@
       "Read(*.pem)",
       "Read(*.key)",
       "Edit(.claude/settings*)",
-      "Write(.claude/settings*)"
+      "Write(.claude/settings*)",
+      "WebFetch(*)"
     ],
     "allow": [
       "Bash(npm *)",

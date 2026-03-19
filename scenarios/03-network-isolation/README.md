@@ -63,13 +63,13 @@ There's a subtle difference between how network rules are enforced:
 
 The verify script tests the strict-deny behavior. In a real session, users get a chance to approve ad-hoc domains.
 
-## Run it
+## Quick Start
 
 ```bash
 npm install && npm test
 ```
 
-## What the tests check
+## Verify It Works
 
 | Test | Command | Expected | Why |
 |---|---|---|---|

@@ -106,5 +106,5 @@ The tests check:
 
 ## Next Steps
 
-- [Scenario 06 — Devcontainer](../06-devcontainer/) — container-based isolation
+- [Scenario 06 — Devcontainer Reference](../06-devcontainer-reference/) — container-based isolation
 - [Scenario 10 — Combined Defense](../10-combined-defense/) — layering all controls together
