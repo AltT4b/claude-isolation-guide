@@ -2,6 +2,11 @@
   "sandbox": {
     "enabled": true,
     "allowUnsandboxedCommands": false,
-    "networkAllowlist": ["api.anthropic.com"]
+    "network": {
+      "allowedDomains": ["api.anthropic.com"]
+    },
+    "filesystem": {
+      "allowWrite": ["."]
+    }
   }
 }

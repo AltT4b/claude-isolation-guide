@@ -19,6 +19,9 @@ set -euo pipefail
 #   5. Normal reads of non-denied files succeed
 #   6. Reads of sensitive system paths are blocked (default behavior)
 #
+# Settings are read from .claude/settings.json (the source of truth) and
+# transformed into srt's flat format at runtime.
+#
 # Usage:
 #   npm install   # installs @anthropic-ai/sandbox-runtime
 #   npm test      # runs this script
@@ -45,28 +48,47 @@ fi
 
 # -- Settings file for srt -------------------------------------------------
 # srt uses a FLAT format — filesystem and network at top level, NOT nested
-# under "sandbox". We map the .claude/settings.json values here.
-#
-# Filesystem rules for this scenario:
-#   denyRead:   [".env*"]         — block reads of .env files
-#   allowWrite: [cwd]             — allow writes inside the project
-#   denyWrite:  [cwd/secrets/]    — block writes to the secrets directory
+# under "sandbox". We read .claude/settings.json (the source of truth) and
+# transform it into srt's expected structure, resolving relative paths to
+# absolute ones.
 SRT_SETTINGS="$(mktemp)"
-cat > "$SRT_SETTINGS" <<SETTINGS_EOF
-{
-  "network": {
-    "allowedDomains": [],
-    "deniedDomains": []
-  },
-  "filesystem": {
-    "denyRead": ["$(pwd)/.env*"],
-    "allowRead": [],
-    "allowWrite": ["$(pwd)"],
-    "denyWrite": ["$(pwd)/secrets/"]
-  }
-}
-SETTINGS_EOF
 trap 'rm -f "$SRT_SETTINGS"' EXIT
+
+node -e "
+  const fs = require('fs');
+  const path = require('path');
+  const s = JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8')).sandbox;
+  const cwd = process.cwd();
+  const home = require('os').homedir();
+
+  function resolve(p) {
+    if (p.startsWith('/')) return p;
+    if (p.startsWith('~/')) return home + p.slice(1);
+    if (p.startsWith('./')) return cwd + p.slice(1);
+    return cwd + '/' + p;
+  }
+
+  // Resolve glob patterns too — prefix with cwd if relative
+  function resolvePattern(p) {
+    if (p.startsWith('/')) return p;
+    if (p.startsWith('~/')) return home + p.slice(1);
+    return cwd + '/' + p;
+  }
+
+  const out = {
+    network: {
+      allowedDomains: (s.network && s.network.allowedDomains) || [],
+      deniedDomains: (s.network && s.network.deniedDomains) || []
+    },
+    filesystem: {
+      denyRead: ((s.filesystem && s.filesystem.denyRead) || []).map(resolvePattern),
+      allowRead: ((s.filesystem && s.filesystem.allowRead) || []).map(resolve),
+      allowWrite: ((s.filesystem && s.filesystem.allowWrite) || []).map(p => p === '.' ? cwd : resolve(p)),
+      denyWrite: ((s.filesystem && s.filesystem.denyWrite) || []).map(resolve)
+    }
+  };
+  fs.writeFileSync(process.argv[1], JSON.stringify(out, null, 2));
+" "$SRT_SETTINGS"
 
 # -- Helpers ----------------------------------------------------------------
 banner() {

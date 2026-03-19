@@ -3,7 +3,7 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "denyRead": [".env*"],
+      "denyRead": [".env*", "~/.ssh"],
       "allowWrite": ["."],
       "denyWrite": ["secrets/"]
     }

@@ -82,7 +82,7 @@ Now `cat .env`, `grep password .env.local`, and similar commands are blocked at 
 
 ### Step 3 — Allow writes to cwd, deny writes to secrets/
 
-Add `allowWrite` for the project directory and `denyWrite` for sensitive subdirectories:
+Add `allowWrite` for the project directory, `denyWrite` for sensitive subdirectories, and extend `denyRead` to protect system secrets too:
 
 ```json
 {
@@ -90,7 +90,7 @@ Add `allowWrite` for the project directory and `denyWrite` for sensitive subdire
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "denyRead": [".env*"],
+      "denyRead": [".env*", "~/.ssh"],
       "allowWrite": ["."],
       "denyWrite": ["secrets/"]
     }
@@ -98,7 +98,7 @@ Add `allowWrite` for the project directory and `denyWrite` for sensitive subdire
 }
 ```
 
-Because `denyWrite` beats `allowWrite`, the `secrets/` directory is protected even though `.` (cwd) is writable. Commands like `touch secrets/test` will be denied.
+Because `denyWrite` beats `allowWrite`, the `secrets/` directory is protected even though `.` (cwd) is writable. Commands like `touch secrets/test` will be denied. And `cat ~/.ssh/id_rsa` is blocked by `denyRead` — the sandbox does not deny reads to system paths by default, so you must explicitly list them.
 
 ## Part 5: The Read vs Bash Gap
 
