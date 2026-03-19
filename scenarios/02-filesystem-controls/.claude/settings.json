@@ -3,9 +3,14 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
+      "allowRead": [],
       "denyRead": [".env*", "~/.ssh"],
       "allowWrite": ["."],
       "denyWrite": ["secrets/"]
+    },
+    "network": {
+      "allowedDomains": [],
+      "deniedDomains": []
     }
   }
 }

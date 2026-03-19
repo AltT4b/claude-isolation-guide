@@ -4,7 +4,7 @@
   "private": true,
   "description": "Demonstrate sandbox filesystem controls: denyRead, allowWrite, denyWrite, and the Read vs Bash gap.",
   "scripts": {
-    "test": "./verify.sh"
+    "test": "node verify.js"
   },
   "devDependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.42"
