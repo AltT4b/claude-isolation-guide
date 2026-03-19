@@ -181,7 +181,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 4: Normal operation within cwd should succeed
+# Test 3: Normal operation within cwd should succeed
 # ---------------------------------------------------------------------------
 banner "Test 3 — Normal Operation Within Working Directory"
 info "Writing, reading, and deleting a temp file inside the current directory."
