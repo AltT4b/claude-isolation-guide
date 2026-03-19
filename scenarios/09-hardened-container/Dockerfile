@@ -3,8 +3,7 @@ FROM node:20-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get purge -y --auto-remove
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code
 RUN npm install -g @anthropic-ai/claude-code
