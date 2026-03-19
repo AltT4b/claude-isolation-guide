@@ -1,0 +1,12 @@
+{
+  "name": "scenario-08-docker-sandboxes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstrate the interaction between Claude Code's sandbox and Docker: excludedCommands, tradeoffs, and what isolation you keep vs. lose.",
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}
