@@ -1,0 +1,9 @@
+{
+  "name": "scenario-05-env-persistence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstrate CLAUDE_ENV_FILE for persistent environment variables and the completion script trap.",
+  "scripts": {
+    "test": "node verify.js"
+  }
+}
