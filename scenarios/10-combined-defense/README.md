@@ -1,5 +1,7 @@
 # Scenario 10 — Combined Defense
 
+## What This Does
+
 One recommended configuration that layers permissions + sandbox + container for defense in depth. Not a buffet — a sane default with documented knobs to loosen.
 
 ## Why It Matters

@@ -29,7 +29,7 @@ Many workflows need Docker — building images, running tests in containers, man
 
 **`allowUnsandboxedCommands: false` is still enforced.** Excluded commands are a specific carve-out, not a blanket escape. Any command not in the excluded list must run sandboxed.
 
-### The Tradeoff
+## The Tradeoff
 
 This is the scenario's core lesson. With `excludedCommands: ["docker"]`:
 
@@ -52,7 +52,7 @@ This is the scenario's core lesson. With `excludedCommands: ["docker"]`:
 
 **The nuclear option:** `docker run -v /:/host` mounts your entire filesystem into a container. If Claude runs this (and you approve it), it has full filesystem access regardless of any sandbox config. The permissions system is your defense here — deny `Bash(docker run -v /*)` patterns if you're concerned.
 
-### `docker exec` is different
+### `docker exec` Is Different
 
 Commands run via `docker exec` inherit the container's isolation, not the host sandbox. The container's filesystem and network restrictions apply — the sandbox has no say.
 

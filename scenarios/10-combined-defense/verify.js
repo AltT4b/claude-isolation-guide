@@ -259,6 +259,7 @@ why("srt is the same sandbox runtime that Claude Code uses to execute Bash comma
 why("Running commands through srt applies identical OS-level restrictions.");
 
 let srtAvailable = false;
+let srtSkipped = 0;
 try {
   const version = execSync("npx srt --version", { encoding: "utf8", timeout: 10000 }).trim();
   pass(`srt is available (${version}).`);
@@ -268,6 +269,7 @@ try {
   warn("Run:  npm install");
   warn("Make sure you have Node.js >= 18.");
   warn("Skipping sandbox enforcement tests (5-8).");
+  srtSkipped = 4;
 }
 
 if (srtAvailable) {
@@ -367,6 +369,9 @@ const total = passCount + failCount;
 console.log();
 console.log(`  ${GREEN}Passed:${RESET} ${passCount} / ${total}`);
 console.log(`  ${RED}Failed:${RESET} ${failCount} / ${total}`);
+if (srtSkipped > 0) {
+  console.log(`  ${YELLOW}Skipped:${RESET} ${srtSkipped} (srt not available — tests 5-8)`);
+}
 console.log();
 console.log(`  ${BOLD}Note:${RESET} Tests 1-4 validate the static configuration.`);
 console.log("  Tests 5-8 validate sandbox enforcement via srt.");
