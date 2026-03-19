@@ -1,0 +1,16 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": ["api.anthropic.com", "httpbin.org"],
+      "deniedDomains": []
+    },
+    "filesystem": {
+      "allowRead": [],
+      "denyRead": [],
+      "allowWrite": ["."],
+      "denyWrite": []
+    }
+  }
+}
