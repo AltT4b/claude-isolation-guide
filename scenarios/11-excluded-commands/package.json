@@ -1,0 +1,12 @@
+{
+  "name": "scenario-11-excluded-commands",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstrate excludedCommands: how to let specific commands bypass the sandbox while keeping everything else sandboxed.",
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}
