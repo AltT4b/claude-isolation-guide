@@ -21,13 +21,9 @@ The security flags in `run.sh` are not just best practices — they are concrete
 ```bash
 # Build the image
 docker build -t claude-sandbox .
-
-# Set your API key
-export ANTHROPIC_API_KEY="your-key-here"
-
-# Run Claude Code
-./run.sh
 ```
+
+To use this container with Claude Code, pass your API key at runtime via `-e ANTHROPIC_API_KEY`. The verification tests below prove the security model without requiring any credentials.
 
 ## Setup
 
@@ -92,7 +88,7 @@ The script checks six things:
 
 ## Gotchas
 
-- **API key handling.** `-e ANTHROPIC_API_KEY` passes from the host environment. Never bake keys into the image. Never use `--env-file` with a `.env` that gets committed.
+- **API key handling.** For production use, pass `-e ANTHROPIC_API_KEY` from the host environment. Never bake keys into the image. Never use `--env-file` with a `.env` that gets committed.
 - **Volume mount is bidirectional.** Claude can modify your project files. That's the point — it needs to write code. But be aware this is not a one-way mirror.
 - **`--read-only` breaks npm install.** The `--tmpfs` for npm cache handles this in most cases. If you need to install additional packages, do it in the Dockerfile build stage.
 - **No network isolation by default.** This scenario focuses on filesystem and process isolation. For network filtering, combine with scenario 03's sandbox network rules or add `--network=none` (but then Claude Code cannot reach the Anthropic API).

@@ -68,12 +68,11 @@ Three independent layers protect your environment. A threat must bypass all thre
 # Build the hardened container
 docker compose build
 
-# Run Claude Code interactively
-ANTHROPIC_API_KEY=your-key docker compose run --rm claude
-
 # Run the verification tests
 docker compose run --rm claude node verify.js
 ```
+
+To use this container with Claude Code, pass your API key at runtime (e.g., `ANTHROPIC_API_KEY=... docker compose run --rm claude`). The verification tests above prove the security model without requiring any credentials.
 
 ## Setup — docker-compose.yml Walkthrough
 
