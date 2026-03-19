@@ -1,16 +1,8 @@
 # Scenario 08 — Docker AI Sandboxes
 
-Run Claude Code inside a Docker AI Sandbox — a microVM managed by Docker Desktop that provides filesystem, network, and process isolation without any manual container configuration.
-
-## Why It Matters
-
-Docker AI Sandboxes (`docker sandbox run claude`) give you full environment isolation with zero Dockerfile authoring. The sandbox runs inside a lightweight microVM with its own kernel, filesystem, and network stack. Claude operates in a disposable environment that cannot affect your host — even if it runs destructive commands.
-
-This is different from the native sandbox (Seatbelt/bubblewrap) which restricts individual Bash commands. Docker AI Sandboxes isolate the entire Claude session.
+You need Claude to operate in a fully isolated environment. But you don't want to author Dockerfiles or tune security flags. `docker sandbox run claude` is the lever.
 
 ## How It Works
-
-### The microVM model
 
 When you run `docker sandbox run claude`, Docker Desktop:
 
@@ -24,13 +16,6 @@ The microVM has its own:
 - **Network stack** — separate from the host. Outbound access is controlled by Docker Desktop's network policies.
 - **Process tree** — Claude and its child processes run inside the VM. No host process visibility.
 - **Docker daemon** — a private Docker-in-Docker instance, so Claude can build and run containers without accessing the host's Docker.
-
-### Workspace sync
-
-Your project directory is synced into the sandbox, not bind-mounted. This means:
-- Changes Claude makes are visible in the sandbox immediately.
-- Changes sync back to the host at session end.
-- Files outside the project directory are not accessible.
 
 ## Running a Docker AI Sandbox
 
@@ -60,9 +45,62 @@ docker sandbox stop <sandbox-id>
 - No `.claude/settings.json` sandbox config — isolation comes from the VM boundary, not from settings.json rules.
 - No `--cap-drop`, `--read-only`, `--security-opt` flags — the microVM provides stronger isolation than any container flag combination.
 
-## Native Sandbox vs. Docker AI Sandbox
+## Config
 
-| | Native Sandbox (srt/Seatbelt/bubblewrap) | Docker AI Sandbox (microVM) |
+This scenario does not use a `.claude/settings.json` sandbox config. The isolation comes from Docker's microVM boundary, not from Claude's sandbox settings. The included settings.json is minimal:
+
+```jsonc
+{} // no sandbox config needed — the VM boundary is the isolation mechanism
+```
+
+You can still layer Claude's native sandbox inside a Docker AI Sandbox for defense in depth, but it's not required — the VM boundary is the primary isolation mechanism.
+
+## Verify
+
+```bash
+npm install && npm test
+```
+
+### What the tests check
+
+| Test | What | Expected | Why |
+|---|---|---|---|
+| Docker available | `docker --version` | Docker is installed | Docker AI Sandboxes require Docker Desktop |
+| Docker sandbox CLI | `docker sandbox --help` | Command exists | Confirms Docker Desktop version supports AI Sandboxes |
+
+Note: The verify script checks that the prerequisites for Docker AI Sandboxes are present. It cannot run an actual sandbox session — that requires Docker Desktop with the sandbox feature enabled and an interactive terminal.
+
+### Sample output
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Test 1 — Docker Availability
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PASS — Docker is available: Docker version 27.x.x
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Passed: 2 / 2
+  All checks passed. Docker AI Sandbox prerequisites are met.
+```
+
+## What You'll See
+
+### Workspace sync
+
+Your project directory is synced into the sandbox, not bind-mounted. This means:
+- Changes Claude makes are visible in the sandbox immediately.
+- Changes sync back to the host at session end.
+- Files outside the project directory are not accessible.
+
+---
+
+## Deep Dive
+
+### Native Sandbox vs. Docker AI Sandbox
+
+| | Native Sandbox (srt) | Docker AI Sandbox (microVM) |
 |---|---|---|
 | **Isolation level** | Per-command syscall filtering | Full VM — separate kernel, filesystem, network |
 | **What it restricts** | Individual Bash commands | The entire Claude session |
@@ -74,38 +112,15 @@ docker sandbox stop <sandbox-id>
 | **Escape risk** | Misconfigured rules, `excludedCommands` holes | VM escape (extremely rare) |
 | **Best for** | Fine-grained control over specific commands | Full environment isolation with minimal config |
 
-## Platform Requirements
+srt (sandbox runtime — the CLI that enforces sandbox rules outside a live Claude session) handles per-command filtering. Docker AI Sandboxes isolate the entire session.
+
+### Platform Requirements
 
 | Platform | Isolation model | Notes |
 |---|---|---|
 | macOS | microVM | Requires Docker Desktop 4.40+ |
 | Windows | microVM | Requires Docker Desktop 4.40+ with WSL2 backend |
 | Linux | Legacy container mode | Uses container isolation instead of microVM. Less isolation than microVM but still stronger than native sandbox alone. |
-
-## Config
-
-This scenario does not use a `.claude/settings.json` sandbox config. The isolation comes from Docker's microVM boundary, not from Claude's sandbox settings. The included settings.json is minimal:
-
-```json
-{}
-```
-
-You can still layer Claude's native sandbox inside a Docker AI Sandbox for defense in depth, but it's not required — the VM boundary is the primary isolation mechanism.
-
-## Run It
-
-```bash
-npm install && npm test
-```
-
-## What the Tests Check
-
-| Test | What | Expected | Why |
-|---|---|---|---|
-| Docker available | `docker --version` | Docker is installed | Docker AI Sandboxes require Docker Desktop |
-| Docker sandbox CLI | `docker sandbox --help` | Command exists | Confirms Docker Desktop version supports AI Sandboxes |
-
-Note: The verify script checks that the prerequisites for Docker AI Sandboxes are present. It cannot run an actual sandbox session — that requires Docker Desktop with the sandbox feature enabled and an interactive terminal.
 
 ## Gotchas
 

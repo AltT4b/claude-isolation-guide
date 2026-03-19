@@ -1,18 +1,20 @@
 # Scenario 06 — Devcontainer Reference
 
-A devcontainer that wraps Claude Code in an isolated environment: dropped capabilities, read-only root fs, non-root user, optional network firewall. Sandbox still runs inside for belt-and-suspenders.
+Use both. The container limits what the environment can touch; the sandbox limits what individual commands can do within it.
+
+A devcontainer that wraps Claude Code in an isolated environment: dropped capabilities, read-only root fs, non-root user, optional network firewall. The native sandbox still runs inside for defense in depth.
 
 ## Prerequisites
 
 You need **Docker** running locally, plus at least one of:
 
-### Option A — VS Code + Dev Containers extension
+**Option A — VS Code + Dev Containers extension**
 
 1. Install [VS Code](https://code.visualstudio.com/).
 2. Install the **Dev Containers** extension (`ms-vscode-remote.remote-containers`) from the Extensions marketplace.
 3. (Optional) Enable the `code` shell command: open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) → **Shell Command: Install 'code' command in PATH**.
 
-### Option B — Devcontainer CLI (no VS Code required)
+**Option B — Devcontainer CLI (no VS Code required)**
 
 The `@devcontainers/cli` package is included as a devDependency. Install it along with everything else:
 
@@ -25,16 +27,63 @@ Then use `npx devcontainer` to run it.
 ## Verify
 
 ```bash
+npm install
+
 # VS Code — open this scenario folder, then:
 code .  # → "Reopen in Container" when prompted (or use Command Palette → "Dev Containers: Reopen in Container")
 
 # CLI — no VS Code needed:
-npm install
 npx devcontainer up --workspace-folder .
 npx devcontainer exec --workspace-folder . npm test
 ```
 
-## What You Get
+### Key `devcontainer.json` security flags
+
+The entire security posture lives in `runArgs`:
+
+```jsonc
+"runArgs": [
+  "--cap-drop=ALL",                    // drop all Linux capabilities
+  "--security-opt=no-new-privileges",  // block setuid escalation
+  "--read-only",                       // immutable root filesystem
+  "--tmpfs=/tmp:rw,noexec,nosuid",     // writable scratch, no exec
+  "--tmpfs=/home/node:rw,nosuid"       // writable home for node user
+]
+```
+
+### Key Dockerfile lines
+
+```dockerfile
+FROM node:20-slim                          # minimal base image
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \                                 # needed for API calls
+    iptables \                             # optional network firewall
+    && rm -rf /var/lib/apt/lists/*
+
+USER node                                  # drop to non-root user
+```
+
+### Sample output
+
+Tests SKIP gracefully when run outside a container:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Test 1 — Container Detection
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  WARN — Not running inside a container.
+  SKIP — Not in a container.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Passed:  0 / 5
+  Skipped: 5 / 5
+  All checks passed (or skipped). Container isolation looks good.
+```
+
+## What You'll See
 
 | Security control | How |
 |---|---|
@@ -44,8 +93,6 @@ npx devcontainer exec --workspace-folder . npm test
 | Writable /tmp, no exec | `--tmpfs=/tmp:rw,noexec,nosuid` |
 | Non-root user | `remoteUser: node` |
 | Network filtering (optional) | `init-firewall.sh` — iptables allowlist |
-
-Tests SKIP gracefully when run outside a container.
 
 ---
 
@@ -61,7 +108,7 @@ Tests SKIP gracefully when run outside a container.
 | **Network** | Domain allowlist per command | Full network namespace, iptables |
 | **Resource limits** | None | cgroups (CPU, memory, I/O) |
 
-**Use both.** The container limits what the environment can touch; the sandbox limits what individual commands can do within it.
+srt (sandbox runtime — the CLI that enforces sandbox rules outside a live Claude session) handles per-command isolation. The container handles per-environment isolation.
 
 ### Setup details
 
@@ -75,12 +122,11 @@ sudo bash .devcontainer/init-firewall.sh
 
 ## Gotchas
 
-- **Docker-in-Docker is tricky.** If Claude Code needs Docker inside the devcontainer, you need DinD or socket mounting — both have security implications.
+- **Docker-in-Docker is tricky.** If Claude Code needs Docker inside the devcontainer, you need DinD or socket mounting — socket mounting exposes the host Docker daemon.
 - **Read-only root filesystem breaks some tools.** Use `--tmpfs` mounts for `/tmp`, `/var/run`, etc. as needed.
 - **`--cap-drop=ALL` is aggressive.** You may need to add back specific capabilities depending on your workflow (e.g., `NET_RAW` for ping).
 - **iptables requires `NET_ADMIN` capability** to set up. Run firewall init before dropping caps, or use a separate init container.
 - **Devcontainer features may pull in more than you expect.** Audit each feature for what it installs and what permissions it needs.
-- **Sandbox inside container is still valuable.** The container limits the environment; the sandbox limits individual commands within it. Belt and suspenders.
 
 ## Next Steps
 
