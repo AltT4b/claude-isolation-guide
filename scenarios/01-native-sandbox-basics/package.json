@@ -1,0 +1,12 @@
+{
+  "name": "scenario-01-native-sandbox-basics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verify that Claude Code's OS-level sandbox is active and working.",
+  "scripts": {
+    "test": "./verify.sh"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.42"
+  }
+}

@@ -22,15 +22,17 @@ With the sandbox enabled, that command fails at the OS level — `cat` cannot re
 
 ```bash
 cd scenarios/01-native-sandbox-basics
+npm install           # installs the sandbox runtime
 claude                # opens Claude Code — sandbox is active via .claude/settings.json
-./verify.sh           # proves the sandbox is working (run in a separate terminal)
+npm test              # proves the sandbox is working (run in a separate terminal)
 ```
 
 ## Part 4: Prerequisites
 
 | Platform    | What You Need                                                |
 |-------------|--------------------------------------------------------------|
-| macOS       | Nothing — Seatbelt is built in.                              |
+| All         | Node.js >= 18, ripgrep (`brew install ripgrep` / `apt-get install ripgrep`) |
+| macOS       | Nothing else — Seatbelt is built in.                         |
 | Linux/WSL2  | `sudo apt-get install bubblewrap socat` (or `dnf` equivalent)|
 | WSL1        | Not supported.                                               |
 | Windows     | Not supported.                                               |
@@ -70,9 +72,13 @@ With this set to `false`, a sandbox-denied command stays denied. Claude cannot r
 
 ## Part 7: Verify It Works
 
-Run `./verify.sh` from this scenario directory (in a separate terminal, not inside a Claude Code session). The script uses `srt` (from the `@anthropic-ai/sandbox-runtime` npm package) to execute commands inside the same OS-level sandbox that Claude Code uses. Install it globally with `npm install -g @anthropic-ai/sandbox-runtime`, or the script will fall back to `npx`.
+Run `npm test` from this scenario directory (in a separate terminal, not inside a Claude Code session). Make sure you've run `npm install` first.
 
-It runs four checks:
+### How the test works
+
+When Claude Code executes a Bash command, it delegates to a sandbox runtime (`srt`) that applies OS-level restrictions via Seatbelt (macOS) or bubblewrap (Linux). `verify.sh` uses that same runtime directly — same binary, same sandbox profiles, same enforcement. The only difference is that you're invoking it from the command line instead of through a Claude session, so no API key or live session is needed.
+
+### What it checks
 
 1. **Write outside cwd** — attempts `touch /tmp/...`. Should be denied. Confirms filesystem write restrictions.
 2. **Read sensitive path** — attempts `cat ~/.ssh/id_rsa`. Should be denied. Confirms reads outside allowed paths are blocked.

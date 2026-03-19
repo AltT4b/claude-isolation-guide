@@ -1,5 +1,8 @@
 ## Tab ##
-./tab
+.tab/
 
 ## Claude ##
-./claude
+.claude/
+
+## Node ##
+node_modules/

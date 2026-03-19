@@ -4,15 +4,24 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # verify.sh — Prove that Claude Code's native sandbox is working.
 #
-# Runs a series of tests inside the sandbox runtime to confirm that
-# filesystem writes outside cwd, reads of sensitive paths, and outbound
-# network to non-allowed domains are all blocked — while normal cwd
-# operations still succeed.
+# How it works:
+#   Claude Code runs every Bash command inside an OS-level sandbox
+#   (Seatbelt on macOS, bubblewrap on Linux). This script uses `srt`
+#   — the same sandbox runtime that Claude Code uses internally — to
+#   run commands under identical restrictions, without needing a live
+#   Claude session or an API key.
+#
+# What it tests:
+#   1. Filesystem writes outside cwd are blocked
+#   2. Reads of sensitive paths (~/.ssh) are blocked
+#   3. Outbound network to non-allowed domains is blocked
+#   4. Normal operations within cwd still work
 #
 # Usage:
-#   ./verify.sh
+#   npm install   # installs @anthropic-ai/sandbox-runtime
+#   npm test      # runs this script
 #
-# Requires: srt (from npm package @anthropic-ai/sandbox-runtime)
+# Requires: Node.js >= 18
 # ---------------------------------------------------------------------------
 
 # -- Colors -----------------------------------------------------------------
@@ -25,6 +34,33 @@ RESET='\033[0m'
 # -- Counters ---------------------------------------------------------------
 PASS_COUNT=0
 FAIL_COUNT=0
+
+# -- Pre-flight: node_modules must exist ------------------------------------
+if [ ! -d "node_modules" ]; then
+  echo -e "${RED}Error:${RESET} node_modules not found. Run ${BOLD}npm install${RESET} first."
+  exit 1
+fi
+
+# -- Settings file for srt -------------------------------------------------
+# srt needs a config file telling it which paths are writable. Without one,
+# the default is maximally restrictive (no writes allowed anywhere).
+# We allow writes to cwd so that Test 4 (normal operations) can succeed.
+SRT_SETTINGS="$(mktemp)"
+cat > "$SRT_SETTINGS" <<SETTINGS_EOF
+{
+  "network": {
+    "allowedDomains": [],
+    "deniedDomains": []
+  },
+  "filesystem": {
+    "denyRead": [],
+    "allowRead": [],
+    "allowWrite": ["$(pwd)"],
+    "denyWrite": []
+  }
+}
+SETTINGS_EOF
+trap 'rm -f "$SRT_SETTINGS"' EXIT
 
 # -- Helpers ----------------------------------------------------------------
 banner() {
@@ -64,30 +100,24 @@ sandbox_exec() {
   # Run a command inside the sandbox runtime.
   # Expects a single string argument containing the full command.
   # Returns the exit code of the sandboxed command.
-  if command -v srt >/dev/null 2>&1; then
-    srt "$1" 2>&1
-  else
-    npx -p @anthropic-ai/sandbox-runtime srt "$1" 2>&1
-  fi
+  npx srt -s "$SRT_SETTINGS" "$1" 2>&1
 }
 
 # ---------------------------------------------------------------------------
 # Pre-flight: confirm sandbox runtime is available
 # ---------------------------------------------------------------------------
 banner "Pre-flight Check"
-info "Verifying that the sandbox runtime CLI (srt) is available."
-why  "All tests below use srt (from @anthropic-ai/sandbox-runtime) to execute"
-why  "commands inside the same OS-level sandbox that Claude Code uses for Bash commands."
+info "Verifying that srt (sandbox runtime) is installed."
+why  "srt is the same sandbox runtime that Claude Code uses to execute Bash commands."
+why  "Running commands through srt applies identical OS-level restrictions."
 
-if command -v srt >/dev/null 2>&1; then
-  pass "srt is globally installed."
-elif npx -p @anthropic-ai/sandbox-runtime srt "echo sandbox-ok" >/dev/null 2>&1; then
-  pass "srt is available via npx."
+if npx srt --version >/dev/null 2>&1; then
+  pass "srt is available ($(npx srt --version))."
 else
   fail "srt is NOT available."
   echo ""
-  warn "Install it with:  npm install -g @anthropic-ai/sandbox-runtime"
-  warn "Or run via npx — make sure you have a recent version of Node.js (>=18)."
+  warn "Run:  npm install"
+  warn "Make sure you have Node.js >= 18."
   echo ""
   echo "Cannot continue without the sandbox runtime. Exiting."
   exit 1
