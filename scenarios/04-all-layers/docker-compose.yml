@@ -1,0 +1,41 @@
+services:
+  sandbox:
+    build:
+      context: ..
+      dockerfile: 04-all-layers/Dockerfile
+
+    # --- Layer 3: Container ---
+    #
+    # SRT (bwrap) requires capabilities and syscalls that Docker's defaults
+    # block. See the README's "tradeoffs" section for what was relaxed and why.
+
+    # bwrap needs SYS_ADMIN for mount/namespace ops; socat needs NET_ADMIN
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+
+    security_opt:
+      - seccomp:unconfined     # bwrap syscalls (unshare, clone, mount)
+      - apparmor:unconfined    # mount inside namespaces (Linux hosts)
+
+    # Root required — Docker doesn't propagate cap_add to non-root effective
+    # capability sets. Non-root isolation is handled by Layer 2 (SRT).
+    user: "0:0"
+
+    # Scratch space with noexec — prevents running binaries from /tmp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    # Bridge networking (default) — SRT handles domain-level filtering
+    # instead of Docker's all-or-nothing network_mode: none
+
+    # Resource limits — the main container-level protection
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    working_dir: /home/claude/project

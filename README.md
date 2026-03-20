@@ -9,13 +9,14 @@ Testable scenarios for the controls that keep [Claude Code](https://docs.anthrop
 | **[01 — Permissions](scenarios/01-permissions/)** | `permissions.deny` rules that block Claude's built-in tools (Read, Edit, WebFetch, etc.) | `npm test` |
 | **[02 — Sandbox](scenarios/02-sandbox/)** | `sandbox.*` settings that control what Bash can touch on disk and reach on the network | `npm test` |
 | **[03 — Containers](scenarios/03-containers/)** | Docker hardening flags that enforce isolation at the container level | `docker compose run --rm sandbox` |
+| **[04 — All Layers](scenarios/04-all-layers/)** | All 3 layers (permissions + sandbox + container) working together — defense-in-depth | `docker compose run --rm sandbox` |
 
-**Start here:** If you're locking down a project, start with [01 — Permissions](scenarios/01-permissions/) (tool-level controls) and [02 — Sandbox](scenarios/02-sandbox/) (Bash-level controls). If you're running Claude inside Docker, go straight to [03 — Containers](scenarios/03-containers/).
+**Start here:** If you're locking down a project, start with [01 — Permissions](scenarios/01-permissions/) (tool-level controls) and [02 — Sandbox](scenarios/02-sandbox/) (Bash-level controls). If you're running Claude inside Docker, go straight to [03 — Containers](scenarios/03-containers/). To see all layers working together, try [04 — All Layers](scenarios/04-all-layers/).
 
 ## Requirements
 
 - **Node.js >= 18** — all scenarios
-- **Docker** — scenario 03 only
+- **Docker** — scenarios 03 and 04
 - **bubblewrap** — Linux/WSL2 only, for scenario 02 (`sudo apt-get install bubblewrap`). macOS uses Seatbelt (built-in).
 
 See each scenario's README for specific prerequisites.

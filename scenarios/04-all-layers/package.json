@@ -1,0 +1,10 @@
+{
+  "name": "04-all-layers",
+  "private": true,
+  "scripts": {
+    "test": "node verify.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "*"
+  }
+}

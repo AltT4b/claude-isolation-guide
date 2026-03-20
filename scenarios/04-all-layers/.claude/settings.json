@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env*)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)",
+      "Bash(curl *)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Agent(*)"
+    ],
+    "allow": [],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "default"
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [],
+    "filesystem": {
+      "allowRead": [],
+      "denyRead": [".env*"],
+      "allowWrite": ["."],
+      "denyWrite": ["secrets/"]
+    },
+    "network": {
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": []
+    }
+  }
+}
