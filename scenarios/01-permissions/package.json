@@ -3,8 +3,5 @@
   "private": true,
   "scripts": {
     "test": "node verify.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sandbox-runtime": "*"
   }
 }
