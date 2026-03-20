@@ -17,6 +17,8 @@ services:
 
     user: "1001:1001"
 
+    network_mode: none
+
     deploy:
       resources:
         limits:
@@ -25,11 +27,4 @@ services:
         reservations:
           memory: 1G
 
-    networks:
-      - isolated
-
     working_dir: /home/claude/project
-
-networks:
-  isolated:
-    driver: bridge

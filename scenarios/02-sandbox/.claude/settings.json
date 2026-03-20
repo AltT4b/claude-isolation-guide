@@ -1,0 +1,17 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker", "docker-compose"],
+    "filesystem": {
+      "allowRead": [],
+      "denyRead": [".env*"],
+      "allowWrite": ["."],
+      "denyWrite": ["secrets/"]
+    },
+    "network": {
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": []
+    }
+  }
+}

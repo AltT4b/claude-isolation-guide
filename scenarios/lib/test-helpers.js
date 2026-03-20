@@ -28,10 +28,30 @@ function banner(title) {
   console.log(`${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
 }
 
-function info(msg) { console.log(`  ${BOLD}What:${RESET}  ${msg}`); }
-function why(msg)  { console.log(`  ${BOLD}Why:${RESET}   ${msg}`); }
-function cmd(msg)  { console.log(`  ${BOLD}Cmd:${RESET}   ${msg}`); }
-function gap(msg)  { console.log(`  ${YELLOW}${BOLD}GAP:${RESET}   ${msg}`); }
+const DIM = "\x1b[2m";
+
+function info(msg)   { console.log(`  ${BOLD}What:${RESET}  ${msg}`); }
+function why(msg)    { console.log(`  ${BOLD}Why:${RESET}   ${msg}`); }
+function prompt(msg) { console.log(`  ${BOLD}Sent:${RESET}  ${DIM}${msg}${RESET}`); }
+function cmd(msg)    { console.log(`  ${BOLD}Cmd:${RESET}   ${msg}`); }
+function gap(msg)    { console.log(`  ${YELLOW}${BOLD}GAP:${RESET}   ${msg}`); }
+
+/**
+ * Show Claude's response text, truncated and indented.
+ * @param {object|null} data  Parsed JSON response (must have .result).
+ * @param {number} [maxLen=200]  Max characters to show.
+ */
+function response(data, maxLen = 200) {
+  if (!data) { console.log(`  ${DIM}(no response)${RESET}`); return; }
+  const text = data.result || "(no result text)";
+  const truncated = text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+  // Indent each line under a "Got:" label
+  const lines = truncated.split("\n");
+  console.log(`  ${BOLD}Got:${RESET}   ${DIM}${lines[0]}${RESET}`);
+  for (let i = 1; i < lines.length; i++) {
+    console.log(`         ${DIM}${lines[i]}${RESET}`);
+  }
+}
 
 function pass(msg) {
   console.log(`  ${GREEN}PASS${RESET} — ${msg}`);
@@ -79,6 +99,6 @@ function exitCode() {
 }
 
 module.exports = {
-  banner, info, why, cmd, gap, pass, fail, warn, skip, summary, exitCode,
-  RED, GREEN, YELLOW, BOLD, RESET,
+  banner, info, why, prompt, cmd, gap, pass, fail, warn, skip, response, summary, exitCode,
+  RED, GREEN, YELLOW, DIM, BOLD, RESET,
 };
