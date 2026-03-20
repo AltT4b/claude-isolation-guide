@@ -39,3 +39,38 @@ services:
           memory: 1G
 
     working_dir: /home/claude/project
+
+  claude:
+    build:
+      context: ..
+      dockerfile: 04-container-with-sandbox/Dockerfile
+
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+
+    user: "0:0"
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    working_dir: /home/claude/project
+    stdin_open: true
+    tty: true
+    entrypoint: ["docker-entrypoint.sh"]
+    command: ["claude"]
+
+    environment:
+      - ANTHROPIC_API_KEY

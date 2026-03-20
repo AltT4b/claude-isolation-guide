@@ -19,10 +19,14 @@ COPY 04-container-with-sandbox/package.json ./
 RUN npm install
 
 COPY lib/ /home/claude/lib/
+COPY lib/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 COPY 04-container-with-sandbox/verify.js 04-container-with-sandbox/docker-compose.yml ./
 COPY 04-container-with-sandbox/.claude/ .claude/
 COPY 04-container-with-sandbox/.env.example ./
 
 RUN mkdir -p secrets
 
-CMD ["npm", "test"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["test"]

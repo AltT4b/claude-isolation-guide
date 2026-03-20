@@ -89,7 +89,8 @@ The container has internet access, but every Bash command runs through SRT's net
 ## Prerequisites
 
 1. **Docker** with Compose v2 (`docker compose`)
-2. **Node.js >= 18** (only needed if running verify.js outside the container)
+2. **An Anthropic API key** (for the `claude` service)
+3. **Node.js >= 18** (only needed if running verify.js outside the container)
 
 ## Configuration
 
@@ -194,14 +195,25 @@ COPY 04-container-with-sandbox/.env.example ./
 
 RUN mkdir -p secrets
 
-CMD ["npm", "test"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["test"]
 ```
 
 ## Run It
 
 ```bash
+# Build the image (shared by both services)
 docker compose build
+
+# Launch Claude Code interactively with all 3 layers active
+export ANTHROPIC_API_KEY=sk-ant-...
+docker compose run --rm claude
+
+# Run the verification tests (no API key needed)
 docker compose run --rm sandbox
+
+# Drop into an interactive shell to explore all 3 layers
+docker compose run --rm sandbox bash
 ```
 
 ## What You'll See
@@ -254,6 +266,32 @@ The verify script runs up to 25 checks across all 3 layers. Expected output: **a
 |-------|------|----------|
 | Claude CLI installed | Runtime | Version printed |
 
+## Commands
+
+You can verify individual controls manually by starting a shell in the container:
+
+```bash
+# Start an interactive shell
+docker compose run --rm sandbox bash
+
+# Layer 3: Check container controls
+id                                          # should be root (UID 0)
+grep CapEff /proc/self/status               # SYS_ADMIN should be present
+cat /sys/fs/cgroup/memory.max               # should show bytes, not "max"
+
+# Layer 2: Check SRT sandbox enforcement
+npx srt cat .env.example                    # should be blocked (denyRead .env*)
+npx srt touch /tmp/test                     # should be blocked (outside allowWrite)
+npx srt curl -sf --max-time 3 https://example.com   # blocked (not in allowedDomains)
+npx srt curl -sf --max-time 3 https://api.anthropic.com  # allowed
+
+# Layer 2: Normal operations should work
+npx srt sh -c 'echo hello > test && cat test && rm test'
+
+# All layers: Claude CLI
+claude --version
+```
+
 ## Break It on Purpose
 
 ### Remove a sandbox rule (Layer 2)
@@ -304,6 +342,6 @@ Breaking one layer proves the other layers keep working independently. That's th
 
 ## Cost
 
-0 API calls. Docker build and run only.
+0 API calls for verification. The `claude` service uses your API key.
 
 Permission enforcement (Layer 1) is validated via config checks, not `claude -p` calls. To test permissions at runtime, see [Scenario 01](../01-permissions/).
