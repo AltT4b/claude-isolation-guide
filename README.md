@@ -1,18 +1,30 @@
-# Claude Code Sandbox Testing
+# Claude Code Isolation Guide
 
-Docs say the sandbox works. These scenarios let you *see* it.
+A hands-on guide to the controls and enforcement mechanisms that keep [Claude Code](https://docs.anthropic.com/en/docs/claude-code) isolated. Each scenario is self-contained. No API key required.
 
-A hands-on guide to [Claude Code's](https://docs.anthropic.com/en/docs/claude-code) sandbox — the OS-level isolation layer that restricts what Bash commands can touch. Each scenario is self-contained. No API key required.
+## How Isolation Works
 
-## Why this exists
+Claude Code isolates itself using `settings.json` controls and an execution environment. Which enforcement mechanism is active depends on where Claude is running.
 
-The sandbox enforces restrictions at the kernel level — [Seatbelt](https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf) on macOS, [bubblewrap](https://github.com/containers/bubblewrap) on Linux — so even a command you accidentally approve can't read your SSH keys or phone home.
+**`settings.json` controls** — always active, everywhere:
+
+| Control | What it restricts | How |
+|---------|------------------|-----|
+| **Permissions** | Claude's built-in tools (Read, Edit, Write, WebFetch) | `permissions.deny` blocks tool invocations; `permissions.allow` pre-approves them |
+| **Sandbox rules** | Bash commands — filesystem and network access | `sandbox.*` configures what files Bash can touch and what domains it can reach |
+
+**Execution environment** — one or the other, not both:
+
+| Environment | What it enforces | How |
+|-------------|-----------------|-----|
+| **Host** | Sandbox rules via OS-level wrapping | [srt](https://www.npmjs.com/package/@anthropic-ai/sandbox-runtime) wraps every Bash command in [bubblewrap](https://github.com/containers/bubblewrap) (Linux) or [Seatbelt](https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf) (macOS) |
+| **Container** | Environment-level isolation | Docker security flags: non-root user, dropped capabilities, read-only filesystem, resource limits |
+
+Inside a hardened container, bubblewrap can't run (`--cap-drop=ALL` blocks namespace creation). The container itself provides the enforcement boundary instead.
 
 For full sandbox documentation, see [Claude Code: Sandbox mode](https://docs.anthropic.com/en/docs/claude-code/security#sandbox-mode). See [`settings.json` Reference](docs/settings-reference.md) for full property docs.
 
 ## Requirements
-
-Each scenario runs commands through [`srt`](https://www.npmjs.com/package/@anthropic-ai/sandbox-runtime) (sandbox runtime) — the same runtime Claude Code uses internally. You need:
 
 | Dependency | Version | Purpose |
 |---|---|---|
@@ -20,46 +32,17 @@ Each scenario runs commands through [`srt`](https://www.npmjs.com/package/@anthr
 | [npm](https://www.npmjs.com/) | Included with Node.js | Package manager |
 | [bubblewrap](https://github.com/containers/bubblewrap) | Latest (Linux/WSL2 only) | Linux sandbox backend |
 | [@anthropic-ai/sandbox-runtime](https://www.npmjs.com/package/@anthropic-ai/sandbox-runtime) | Installed per-scenario via `npm install` | OS-level sandbox runtime |
+| [Docker](https://docs.docker.com/get-docker/) | Latest | Container scenario (03) |
 
 macOS needs nothing beyond Node.js — Seatbelt is built in. WSL1 and native Windows are not supported.
 
 ## Scenarios
 
-### Start here
+**[01 — Permissions](scenarios/01-permissions/)** — The sandbox only covers Bash. Claude's built-in tools (Read, Edit, WebFetch) bypass it entirely. `permissions.deny` closes that gap.
 
-These three scenarios cover the sandbox fundamentals: what gets blocked, what's allowed, and how the rules compose.
+**[02 — Sandbox](scenarios/02-sandbox/)** — Every sandbox setting end-to-end: filesystem controls, network allowlists, escape hatches. Deny always beats allow.
 
-**[01 — Native Sandbox Basics](scenarios/01-native-sandbox-basics/)** — The simplest proof: watch the sandbox block writes and network while leaving normal ops untouched.
-
-**[02 — Filesystem Controls](scenarios/02-filesystem-controls/)** — Fine-grained read/write control, including why deny beats allow when both match.
-
-**[03 — Network Isolation](scenarios/03-network-isolation/)** — Domain allowlists for Bash, plus why DNS resolution and HTTP access are different things.
-
-### Harden your setup
-
-Layer permissions and environment config on top of the sandbox.
-
-**[04 — Permissions Hardening](scenarios/04-permissions-hardening/)** — The sandbox only covers Bash. Read, Edit, and WebFetch operate outside it — `permissions.deny` closes those gaps.
-
-**[05 — Environment Persistence](scenarios/05-env-persistence/)** — `CLAUDE_ENV_FILE` lets env vars survive across Bash invocations — but source a completion script in it and every command silently dies.
-
-### Container isolation
-
-When you need more than process-level sandboxing: filesystem, network namespace, and process tree boundaries.
-
-**[06 — Devcontainer Reference](scenarios/06-devcontainer-reference/)** — Container-level isolation with its own filesystem, network namespace, and process tree.
-
-**[07 — Standalone Docker](scenarios/07-standalone-docker/)** — Claude Code in a plain Docker container with `--cap-drop=ALL`, `--read-only`, `--security-opt=no-new-privileges`, and `noexec` tmpfs.
-
-**[08 — Docker AI Sandboxes](scenarios/08-docker-sandboxes/)** — Zero-config isolation via Docker Desktop's AI Sandbox — a microVM with full environment separation.
-
-**[09 — Hardened Container](scenarios/09-hardened-container/)** — Every reasonable Docker security control in one reference: dropped capabilities, no-new-privileges, read-only root, noexec tmpfs, resource limits, non-root user, isolated bridge network.
-
-### Putting it together
-
-**[10 — Combined Defense](scenarios/10-combined-defense/)** — A recommended default config layering permissions + sandbox + container for defense in depth. Documented knobs to loosen.
-
-**[11 — Excluded Commands](scenarios/11-excluded-commands/)** — Prefix-match carve-outs that let specific commands bypass the sandbox while everything else stays locked.
+**[03 — Containers](scenarios/03-containers/)** — Docker hardening as the execution environment. Five controls, five tests. Includes devcontainer equivalent.
 
 ## Quick-start `settings.json`
 
@@ -78,8 +61,16 @@ A minimal recommended starting point. See the [full `settings.json` reference](d
     "network": {
       "allowedDomains": ["api.anthropic.com"]
     }
+  },
+  "permissions": {
+    "deny": [
+      "Read(.env*)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)",
+      "WebFetch(*)"
+    ]
   }
 }
 ```
 
-> **Note:** `permissions.allow` and `permissions.deny` can also be placed in `.claude/settings.local.json` (gitignored) for user-specific overrides. See [Scenario 04](scenarios/04-permissions-hardening/) for this pattern.
+> **Tip:** `permissions.allow` and `permissions.deny` can also be placed in `.claude/settings.local.json` (gitignored) for user-specific overrides. See [Scenario 01](scenarios/01-permissions/) for this pattern.

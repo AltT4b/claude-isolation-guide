@@ -42,15 +42,22 @@ function buildSrtSettings(scenarioDir, opts) {
 
   const out = {};
 
-  // Network passes through unchanged — no paths to resolve
-  if (s.network) out.network = s.network;
+  // Network — srt requires both allowedDomains and deniedDomains
+  if (s.network) {
+    out.network = {
+      deniedDomains: [],
+      ...s.network,
+    };
+  }
 
-  // Filesystem needs path resolution. If absent from settings.json and a
-  // default was provided, use the default so srt gets a valid config.
+  // Filesystem needs path resolution. srt requires both allowWrite and
+  // denyWrite (plus denyRead if present). If absent from settings.json and
+  // a default was provided, use the default so srt gets a valid config.
   const fsSection = s.filesystem || (opts && opts.filesystemDefaults) || null;
   if (fsSection) {
+    const merged = { denyWrite: [], ...fsSection };
     out.filesystem = Object.fromEntries(
-      Object.entries(fsSection).map(([k, v]) =>
+      Object.entries(merged).map(([k, v]) =>
         [k, Array.isArray(v) ? v.map(resolve) : v]
       )
     );

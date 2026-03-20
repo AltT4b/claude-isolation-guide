@@ -1,0 +1,35 @@
+services:
+  sandbox:
+    build:
+      context: ..
+      dockerfile: 03-containers/Dockerfile
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    user: "1001:1001"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    networks:
+      - isolated
+
+    working_dir: /home/claude/project
+
+networks:
+  isolated:
+    driver: bridge

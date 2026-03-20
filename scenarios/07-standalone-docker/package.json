@@ -1,9 +1,0 @@
-{
-  "name": "scenario-07-standalone-docker",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Run Claude Code in an isolated Docker container with security defaults.",
-  "scripts": {
-    "test": "node verify.js"
-  }
-}

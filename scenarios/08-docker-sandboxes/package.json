@@ -1,9 +1,0 @@
-{
-  "name": "scenario-08-docker-sandboxes",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Verify prerequisites for Docker AI Sandboxes: Docker Desktop availability and the docker sandbox CLI.",
-  "scripts": {
-    "test": "node verify.js"
-  }
-}
