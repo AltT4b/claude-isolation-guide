@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // ---------------------------------------------------------------------------
-// verify.js — Scenario 04: All Layers
+// verify.js — Scenario 04: Container with Sandbox
 //
 // Tests all 3 isolation layers working together inside a single container:
 //   Layer 1: Permissions — tool-level deny rules

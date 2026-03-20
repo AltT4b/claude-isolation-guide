@@ -1,4 +1,4 @@
-# Scenario 04 — All Layers
+# Scenario 04 — Container with Sandbox
 
 Scenarios 01-03 demonstrate each isolation layer individually. This scenario runs all three together inside a single Docker container: permissions, sandbox (SRT), and container hardening.
 
@@ -141,7 +141,7 @@ services:
   sandbox:
     build:
       context: ..
-      dockerfile: 04-all-layers/Dockerfile
+      dockerfile: 04-container-with-sandbox/Dockerfile
 
     cap_add:
       - SYS_ADMIN              # bwrap: mount(), pivot_root(), namespaces
@@ -184,13 +184,13 @@ RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /home/claude/project
 
-COPY 04-all-layers/package.json ./
+COPY 04-container-with-sandbox/package.json ./
 RUN npm install
 
 COPY lib/ /home/claude/lib/
-COPY 04-all-layers/verify.js 04-all-layers/docker-compose.yml ./
-COPY 04-all-layers/.claude/ .claude/
-COPY 04-all-layers/.env.example ./
+COPY 04-container-with-sandbox/verify.js 04-container-with-sandbox/docker-compose.yml ./
+COPY 04-container-with-sandbox/.claude/ .claude/
+COPY 04-container-with-sandbox/.env.example ./
 
 RUN mkdir -p secrets
 

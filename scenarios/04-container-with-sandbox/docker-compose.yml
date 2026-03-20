@@ -2,7 +2,7 @@ services:
   sandbox:
     build:
       context: ..
-      dockerfile: 04-all-layers/Dockerfile
+      dockerfile: 04-container-with-sandbox/Dockerfile
 
     # --- Layer 3: Container ---
     #

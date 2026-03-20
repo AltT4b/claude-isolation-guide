@@ -1,5 +1,5 @@
 {
-  "name": "04-all-layers",
+  "name": "04-container-with-sandbox",
   "private": true,
   "scripts": {
     "test": "node verify.js"
