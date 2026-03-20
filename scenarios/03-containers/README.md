@@ -1,21 +1,35 @@
 # Scenario 03 — Containers
 
-A hardened Docker container replaces bubblewrap as the OS-level enforcement mechanism. The container itself enforces isolation — even if every voluntary control (permissions, sandbox rules) is bypassed.
+Run Claude Code inside a hardened Docker container. The container enforces isolation at the OS level — even if every voluntary control (permissions, sandbox rules) is bypassed.
 
 ## Scope
 
-This scenario focuses on **Docker security controls** — the hardening flags in `docker-compose.yml` that enforce isolation at the container level. On the host, bubblewrap (bwrap) wraps Bash commands in a sandbox. Inside a hardened container, bwrap can't run — `cap_drop: [ALL]` blocks the unprivileged namespace creation it needs. That's fine: containers and bwrap are **alternative mechanisms for the same layer** — execution isolation. You don't need both.
+This scenario focuses on **Docker security controls** — the hardening flags in `docker-compose.yml` that enforce isolation at the container level. On the host, bubblewrap (bwrap) wraps Bash commands in a sandbox. Inside a hardened container, bwrap can't run — `cap_drop: [ALL]` blocks the unprivileged namespace creation bwrap requires. That's fine: containers and bwrap are **alternative mechanisms for the same layer** — execution isolation. Either one provides the OS-level enforcement.
 
-Six controls are tested:
+### Two services, one image
+
+The compose file defines two services from the same Dockerfile:
+
+| Service | Purpose | Network | Read-only root | Use |
+|---------|---------|---------|---------------|-----|
+| `claude` | Interactive Claude Code | Bridge (API access) | No | `docker compose run --rm claude` |
+| `sandbox` | Verification tests | `none` (all blocked) | Yes | `docker compose run --rm sandbox` |
+
+Both services share four hardening controls:
 
 | Control | Docker flag | What it prevents |
 |---------|------------|-----------------|
 | Drop capabilities | `cap_drop: [ALL]` | No raw sockets, no mount, no kernel tricks |
 | No privilege escalation | `security_opt: [no-new-privileges:true]` | setuid binaries can't escalate to root |
-| Read-only root | `read_only: true` | No persistent backdoors or config tampering |
 | Non-root user | `user: "1001:1001"` | Container escape gives attacker limited user, not root |
 | Resource limits | `deploy.resources.limits` | No OOM-killing the host or starving other containers |
-| Network disabled | `network_mode: none` | No outbound connections at all |
+
+The `sandbox` service adds two more for maximum lockdown:
+
+| Control | Docker flag | Why `claude` can't use it |
+|---------|------------|--------------------------|
+| Read-only root | `read_only: true` | Claude Code writes runtime state to `~/.claude`, `~/.config`, etc. |
+| Network disabled | `network_mode: none` | Claude Code connects to `api.anthropic.com` |
 
 ### Network: containers vs. srt
 
@@ -37,12 +51,13 @@ The sandbox runtime (srt) provides **domain-level network filtering** — you ca
 
 This is workable for production setups where you control the infrastructure, but it's inherently more fragile than srt's `allowedDomains`, which operates at the domain level natively and doesn't require privilege escalation.
 
-This scenario uses `network_mode: none` because it's the simplest option that actually blocks outbound traffic. If you need domain-level filtering, use srt on the host ([Scenario 02](../02-sandbox/)).
+The `claude` service uses bridge networking because it's the simplest option that allows API access. If you need domain-level filtering, use srt on the host ([Scenario 02](../02-sandbox/)) or combine both approaches ([Scenario 04](../04-container-with-sandbox/)).
 
 ## Prerequisites
 
 1. **Docker** with Compose v2 (`docker compose`)
-2. **Node.js >= 18** (only needed if running verify.js outside the container)
+2. **An Anthropic API key** (for the `claude` service)
+3. **Node.js >= 18** (only needed if running verify.js outside the container)
 
 ## Configuration
 
@@ -50,31 +65,62 @@ This scenario uses `network_mode: none` because it's the simplest option that ac
 
 ```yaml
 services:
-  sandbox:
+  # Interactive Claude Code — hardened container with API access
+  claude:
     build: .
 
-    # Drop every Linux capability — no raw sockets, no mount, no kernel tricks
     cap_drop:
       - ALL
 
-    # Prevent setuid binaries from escalating to root
     security_opt:
       - no-new-privileges:true
 
-    # No writes to the root filesystem — blocks persistent backdoors
-    read_only: true
+    # read_only not set — Claude Code writes runtime state to the home directory
 
-    # Writable scratch space, but noexec prevents running binaries from /tmp
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
 
-    # Run as non-root user — limits damage if the container is compromised
     user: "1001:1001"
 
-    # No network at all — Docker has no domain-level allowlist
+    # Bridge networking — Claude Code connects to api.anthropic.com
+    # For domain-level filtering, see Scenario 04 (container + sandbox)
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    working_dir: /home/claude/project
+    stdin_open: true
+    tty: true
+    entrypoint: ["docker-entrypoint.sh"]
+    command: ["claude"]
+
+    environment:
+      - ANTHROPIC_API_KEY
+
+  # Verification tests — maximum lockdown (no network, read-only root)
+  sandbox:
+    build: .
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    user: "1001:1001"
+
     network_mode: none
 
-    # Prevent resource exhaustion on the host
     deploy:
       resources:
         limits:
@@ -90,10 +136,10 @@ services:
 
 - **`cap_drop: [ALL]`** — Drops every Linux capability. No raw sockets, no mount, no kernel namespace tricks. This is what prevents bwrap from running inside the container.
 - **`security_opt: [no-new-privileges:true]`** — Blocks setuid binaries from escalating to root. Without this, a setuid binary inside the container could regain capabilities that `cap_drop` removed.
-- **`read_only: true`** — Makes the root filesystem read-only. Prevents persistent backdoors, config tampering, or writing malicious scripts to disk.
+- **`read_only: true`** (sandbox only) — Makes the root filesystem read-only. Prevents persistent backdoors, config tampering, or writing malicious scripts to disk. Not used on the `claude` service because Claude Code writes runtime state to the home directory.
 - **`tmpfs: /tmp:rw,noexec,nosuid,size=256m`** — Writable scratch space for temp files, but `noexec` prevents running binaries from /tmp and size is capped.
 - **`user: "1001:1001"`** — Runs as non-root. If the container is compromised, the attacker gets a limited user, not root.
-- **`network_mode: none`** — Disables all networking. The container has no network interfaces except loopback. This is all-or-nothing — Docker has no built-in domain allowlist like srt's `allowedDomains`.
+- **`network_mode: none`** (sandbox only) — Disables all networking. The container has no network interfaces except loopback. Not used on the `claude` service because it connects to the Anthropic API.
 - **`deploy.resources.limits`** — Caps CPU at 2 cores and memory at 4 GB. Prevents a runaway process from OOM-killing the host or starving other containers.
 
 ### `Dockerfile`
@@ -121,17 +167,34 @@ RUN chown -R claude:claude /home/claude
 
 USER claude
 
-CMD ["npm", "test"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["test"]
 ```
 
 ## Run It
 
 ```bash
+# Build the image (shared by both services)
 docker compose build
+
+# Launch Claude Code interactively
+export ANTHROPIC_API_KEY=sk-ant-...
+docker compose run --rm claude
+
+# Run the verification tests (no API key needed)
 docker compose run --rm sandbox
+
+# Drop into a shell to explore the hardened environment
+docker compose run --rm sandbox bash
 ```
 
 ## What You'll See
+
+### Claude service
+
+Claude Code starts interactively inside the hardened container. Four controls are active: capabilities dropped, no privilege escalation, non-root user, and resource limits. Network is bridge (API access) and the filesystem is writable (Claude Code writes runtime state to the home directory).
+
+### Sandbox service
 
 The verify script runs 13 checks. Expected output: **13 passed, 0 failed**.
 
@@ -192,7 +255,7 @@ The tests prove the hardening controls are active. But how do you know the tests
 
 ### 1. Remove `cap_drop: [ALL]`
 
-Open `docker-compose.yml` and delete the `cap_drop` block:
+Open `docker-compose.yml` and delete the `cap_drop` block from the `sandbox` service:
 
 ```diff
  services:
@@ -250,15 +313,14 @@ If you use VS Code Dev Containers or GitHub Codespaces, the same controls go in 
   "runArgs": [
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
-    "--read-only",
     "--tmpfs=/tmp:rw,noexec,nosuid",
     "--network=none"
   ]
 }
 ```
 
-Same security controls, different format. The devcontainer spec doesn't support `deploy.resources` directly — use `--memory=4g` and `--cpus=2` in `runArgs` instead.
+Same security controls, different format. The devcontainer spec doesn't support `deploy.resources` directly — use `--memory=4g` and `--cpus=2` in `runArgs` instead. Note: `--read-only` and `--network=none` are shown here for the verification equivalent; for interactive Claude use, omit both.
 
 ## Cost
 
-0 API calls. Docker build and run only.
+0 API calls for verification. Claude service uses your API key.
