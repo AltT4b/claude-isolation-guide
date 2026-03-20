@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)",
+      "Bash(curl *)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Agent(*)"
+    ],
+    "allow": [],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable"
+  }
+}

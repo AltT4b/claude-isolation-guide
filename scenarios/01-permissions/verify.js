@@ -309,34 +309,27 @@ t.banner("Test — additional-dirs");
 t.info("permissions.additionalDirectories grants Read access outside the project root.");
 t.why("By default Claude can only read files within the project directory.");
 {
-  // Ensure outside/hello.txt exists
-  const outsideDir = path.join(SCENARIO_DIR, "outside");
-  const outsideFile = path.join(outsideDir, "hello.txt");
-  if (!fs.existsSync(outsideFile)) {
-    fs.mkdirSync(outsideDir, { recursive: true });
-    fs.writeFileSync(outsideFile, "Hello from outside the project directory.\n");
-  }
+  // Use the repo root README.md — genuinely outside this scenario's project root
+  const repoRoot = path.resolve(SCENARIO_DIR, "..", "..");
+  const targetFile = path.join(repoRoot, "README.md");
 
-  // For this test, we need additionalDirectories pointing to outside/
-  // Build a temp settings with the directory added
+  // Build temp settings with additionalDirectories pointing to repo root
   const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
-  settings.permissions.additionalDirectories = [
-    path.resolve(SCENARIO_DIR, "outside"),
-  ];
+  settings.permissions.additionalDirectories = [repoRoot];
   const tmpPath = path.join(os.tmpdir(), `01-perms-addl-dirs-${process.pid}.json`);
   fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2));
 
   const res = claudeRun(
-    `Read ${outsideFile} and show its contents`,
+    `Read ${targetFile} and show its first line`,
     { settingsFile: tmpPath }
   );
   try { fs.unlinkSync(tmpPath); } catch {}
 
   if (res.ok && res.data && res.data.result &&
-      res.data.result.includes("Hello from outside")) {
-    t.pass("Claude read outside/hello.txt with additionalDirectories set.");
+      res.data.result.includes("Claude Code Isolation Guide")) {
+    t.pass("Claude read repo root README.md with additionalDirectories set.");
   } else {
-    t.fail("Could not read outside/hello.txt despite additionalDirectories.");
+    t.fail("Could not read repo root README.md despite additionalDirectories.");
     if (res.raw) console.log(`  Response: ${res.raw.slice(0, 200)}`);
   }
 }

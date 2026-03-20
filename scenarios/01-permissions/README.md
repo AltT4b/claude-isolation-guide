@@ -179,7 +179,7 @@ Each test sends a prompt that triggers a denied tool. Pass condition: the JSON r
 - **bash-allow** — Sends `echo hello-from-permissions` and checks that the result contains the expected output, confirming the `Bash(echo *)` allow rule works.
 
 ### additionalDirectories test (1 test)
-- **additional-dirs** — Creates a temp settings file with `additionalDirectories` pointing to `outside/`, then asks Claude to read `outside/hello.txt`. Pass: the response contains the file contents.
+- **additional-dirs** — Creates a temp settings file with `additionalDirectories` pointing to the repo root (two levels up from this scenario), then asks Claude to read the repo root's `README.md`. Pass: the response contains the file's contents. This works because the repo root is genuinely outside the scenario's project directory.
 
 ### defaultMode test (1 test)
 - **plan-mode** — Creates a temp settings file with `defaultMode: "plan"`, then asks Claude to create a file. Pass: the file was not created (plan mode is read-only).
@@ -345,7 +345,7 @@ npm test -- --break additional-dirs
 
 **Before (working):**
 ```json
-"additionalDirectories": ["/absolute/path/to/outside"]
+"additionalDirectories": ["/absolute/path/to/repo-root"]
 ```
 
 **After (broken):**
@@ -353,7 +353,7 @@ npm test -- --break additional-dirs
 "additionalDirectories": []
 ```
 
-Without the additional directory entry, Claude cannot read files outside the project root. The `outside/hello.txt` file becomes inaccessible.
+Without the additional directory entry, Claude cannot read files outside the project root. The repo root's `README.md` becomes inaccessible to the Read tool.
 
 ### `--break plan-mode`
 

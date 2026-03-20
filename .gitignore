@@ -4,6 +4,7 @@
 
 ## Claude ##
 .claude/
+!scenarios/**/.claude/
 
 ## Node ##
 node_modules/
