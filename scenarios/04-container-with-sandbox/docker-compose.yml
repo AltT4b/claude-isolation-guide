@@ -1,83 +1,4 @@
 services:
-  verify:
-    build:
-      context: ..
-      dockerfile: 04-container-with-sandbox/Dockerfile
-
-    init: true
-
-    # --- Layer 3: Container ---
-    #
-    # Ubuntu 24.04 enables unprivileged user namespaces, so bwrap works as
-    # non-root without SYS_ADMIN. Only socat's network proxy needs elevated
-    # capabilities.
-
-    # socat needs NET_ADMIN + NET_RAW for SRT's network proxy
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-
-    security_opt:
-      - no-new-privileges:true
-
-    # Non-root — unprivileged user namespaces replace SYS_ADMIN
-    user: "1001:1001"
-
-    # Scratch space with noexec — prevents running binaries from /tmp
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-
-    # Bridge networking (default) — SRT handles domain-level filtering
-    # instead of Docker's all-or-nothing network_mode: none
-
-    # Resource limits — the main container-level protection
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4G
-        reservations:
-          memory: 1G
-
-    working_dir: /home/claude/project
-
-  claude:
-    build:
-      context: ..
-      dockerfile: 04-container-with-sandbox/Dockerfile
-
-    init: true
-
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-
-    security_opt:
-      - no-new-privileges:true
-
-    user: "1001:1001"
-
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4G
-        reservations:
-          memory: 1G
-
-    working_dir: /home/claude/project
-    stdin_open: true
-    tty: true
-    entrypoint: ["docker-entrypoint.sh"]
-    command: ["claude"]
-
-    environment:
-      - ANTHROPIC_API_KEY
-
-  # Interactive shell — same config as claude, for running claude -p prompts
   bash:
     build:
       context: ..
@@ -92,10 +13,10 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    user: "1001:1001"
-
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
+
+    user: "1001:1001"
 
     deploy:
       resources:
@@ -108,8 +29,4 @@ services:
     working_dir: /home/claude/project
     stdin_open: true
     tty: true
-    entrypoint: ["docker-entrypoint.sh"]
-    command: ["bash"]
-
-    environment:
-      - ANTHROPIC_API_KEY
+    command: ["/bin/bash"]
