@@ -63,8 +63,8 @@ services:
   Without it, if node or Claude Code crashes, orphaned child processes become zombies that accumulate until the container is killed.
   Tini reaps them automatically.
 - **`cap_drop: [ALL]`** — Drops every Linux capability.
-  No raw sockets, no mount, no kernel namespace tricks.
-  This is what prevents bwrap from running inside the container.
+  No raw sockets, no mount, no kernel namespace creation.
+  Claude Code's built-in sandbox (bwrap) needs `CAP_SYS_ADMIN` to create namespaces, so it won't run here — the container itself is the sandbox. If you want both layers, see [Scenario 04](../04-container-with-sandbox/).
 - **`security_opt: [no-new-privileges:true]`** — Blocks setuid binaries from escalating to root.
   Without this, a setuid binary inside the container could regain capabilities that `cap_drop` removed.
 - **`tmpfs: /tmp:rw,noexec,nosuid,size=256m`** — Writable scratch space for temp files.
@@ -175,12 +175,12 @@ Inside the container, the pipe syntax is `| node ../lib/format-result.js` — th
 Copy-paste block. Run from inside the container.
 
 ```bash
-claude -p "Install vim using sudo" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Create a file at /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Install cowsay globally with npm" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Ping 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Write a bash script to /tmp/hello.sh that prints hello, make it executable, and run it" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: sudo apt-get install -y vim" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: touch /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: npm install -g cowsay" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: ping -c 1 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run these exact commands in order and show each output: echo '#!/bin/bash' > /tmp/hello.sh && echo 'echo hello' >> /tmp/hello.sh && chmod +x /tmp/hello.sh && /tmp/hello.sh" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
 ---
@@ -200,15 +200,15 @@ Three prompts, one control. Each demonstrates a different consequence of running
 **1a — Try to install a package with sudo:**
 
 ```bash
-claude -p "Install vim using sudo" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: sudo apt-get install -y vim" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Claude tries `sudo` and gets `sudo: not found`. The escalation path doesn't exist in the image.
+`sudo: not found`. The escalation path doesn't exist in the image.
 
 **1b — Try to write outside the user's home:**
 
 ```bash
-claude -p "Create a file at /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: touch /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
 Permission denied. The container user can't write to `/root` or other system directories.
@@ -216,7 +216,7 @@ Permission denied. The container user can't write to `/root` or other system dir
 **1c — Try to install a global npm package:**
 
 ```bash
-claude -p "Install cowsay globally with npm" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: npm install -g cowsay" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
 EACCES on the global prefix. The container is immutable from the inside — Claude can't augment it with new dependencies.
@@ -239,12 +239,12 @@ Re-run all three. As root, sudo isn't needed — root already has full privilege
 
 > **Control:** Linux capabilities
 > **Docker flag:** `cap_drop: [ALL]`
-> **What it prevents:** Raw sockets, mount, kernel namespace tricks
+> **What it prevents:** Raw sockets, mount, kernel namespace creation
 
 **Try it:**
 
 ```bash
-claude -p "Ping 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: ping -c 1 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
 `ping` needs `CAP_NET_RAW` to open a raw socket. All capabilities are dropped, so it fails with "Operation not permitted".
@@ -272,10 +272,10 @@ Re-run the command. Ping succeeds — the container has its default capabilities
 **Try it:**
 
 ```bash
-claude -p "Write a bash script to /tmp/hello.sh that prints hello, make it executable, and run it" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run these exact commands in order and show each output: echo '#!/bin/bash' > /tmp/hello.sh && echo 'echo hello' >> /tmp/hello.sh && chmod +x /tmp/hello.sh && /tmp/hello.sh" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Claude writes the script and sets the executable bit — both succeed. But running it fails with "Permission denied". The `noexec` mount flag blocks execution from `/tmp` regardless of file permissions.
+The write and chmod succeed. The execution fails with "Permission denied". The `noexec` mount flag blocks execution from `/tmp` regardless of file permissions.
 
 **Break it:** In `docker-compose.yml`, change the tmpfs line to `/tmp:rw,nosuid,size=256m` (remove `noexec`). Then:
 
@@ -297,7 +297,7 @@ Re-run the command. The script executes and prints "hello".
 > **Proves:** Claude is running inside Docker, not on the host
 
 ```bash
-claude -p "Run this exact bash command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
 This should succeed — `/.dockerenv` exists in every Docker container. This confirms the environment is what we think it is. No Break/Restore needed.

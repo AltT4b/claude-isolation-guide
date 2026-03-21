@@ -35,6 +35,9 @@ WORKDIR /home/claude/project
 # Make format-result.js available for test output formatting
 COPY lib/format-result.js /home/claude/lib/format-result.js
 
+# Bypass permissions — the container is the security boundary
+COPY 03-containers/.claude/settings.json /home/claude/project/.claude/settings.json
+
 RUN chown -R claude:claude /home/claude
 
 USER claude
