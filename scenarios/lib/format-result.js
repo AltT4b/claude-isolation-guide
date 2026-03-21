@@ -34,5 +34,62 @@ process.stdin.on("end", () => {
 
   console.log(`${icon} ${status}  (${turns} turn${turns === 1 ? "" : "s"}, ${duration}, ${cost})`);
   console.log("");
-  console.log(data.result || "(no result)");
+
+  if (data.result) {
+    console.log(data.result);
+  } else if (Array.isArray(data.messages)) {
+    // When result is empty, extract tool use details from the conversation.
+    // This catches cases where Claude ran commands but didn't echo the output
+    // in its final text response.
+    const steps = extractToolSteps(data.messages);
+    if (steps.length > 0) {
+      for (const step of steps) {
+        console.log(`$ ${step.command}`);
+        if (step.output) console.log(step.output);
+        if (step.is_error) console.log("(exit: non-zero)");
+        console.log("");
+      }
+    } else {
+      console.log("(no result)");
+    }
+  } else {
+    console.log("(no result)");
+  }
 });
+
+// ---------------------------------------------------------------------------
+// Extract Bash tool use/result pairs from the messages array.
+//
+// Messages alternate assistant → user. An assistant message may contain
+// tool_use blocks; the next user message contains matching tool_result blocks.
+// ---------------------------------------------------------------------------
+function extractToolSteps(messages) {
+  const steps = [];
+  // Map tool_use id → command for Bash invocations
+  const pending = new Map();
+
+  for (const msg of messages) {
+    const content = msg.message?.content ?? msg.content;
+    if (!Array.isArray(content)) continue;
+
+    for (const block of content) {
+      if (block.type === "tool_use" && block.name === "Bash") {
+        const cmd = block.input?.command;
+        if (cmd) pending.set(block.id, cmd);
+      }
+
+      if (block.type === "tool_result" && pending.has(block.tool_use_id)) {
+        const command = pending.get(block.tool_use_id);
+        const output = typeof block.content === "string"
+          ? block.content
+          : Array.isArray(block.content)
+            ? block.content.map((c) => c.text ?? "").join("")
+            : "";
+        steps.push({ command, output: output || null, is_error: !!block.is_error });
+        pending.delete(block.tool_use_id);
+      }
+    }
+  }
+
+  return steps;
+}
