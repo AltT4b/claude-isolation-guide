@@ -1,7 +1,0 @@
-{
-  "name": "03-containers",
-  "private": true,
-  "scripts": {
-    "test": "node verify.js"
-  }
-}

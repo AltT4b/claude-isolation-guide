@@ -32,18 +32,10 @@ RUN groupadd --gid 1001 claude && \
 
 WORKDIR /home/claude/project
 
-COPY 03-containers/package.json ./
-RUN npm install --ignore-scripts
-
-COPY lib/ /home/claude/lib/
-COPY lib/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-COPY 03-containers/verify.js 03-containers/docker-compose.yml ./
+COPY 03-containers/docker-compose.yml ./
 
 RUN chown -R claude:claude /home/claude
 
 USER claude
 
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["test"]
+CMD ["/bin/bash"]
