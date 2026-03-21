@@ -6,7 +6,7 @@ case "${1:-test}" in
     npm test
     exit_code=$?
     echo ""
-    echo "Tip: Run 'docker compose run --rm sandbox claude' to launch Claude Code interactively."
+    echo "Tip: Run 'docker compose run --rm claude' to launch Claude Code interactively."
     exit $exit_code
     ;;
   claude)

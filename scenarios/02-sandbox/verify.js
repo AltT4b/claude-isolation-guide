@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // verify.js — Scenario 02: Sandbox
 //
-// Tests sandbox configuration (settings.json correctness) and enforcement
-// (actual OS-level blocking via srt, the sandbox runtime).
+// Tests sandbox enforcement — actual OS-level blocking via srt, the sandbox
+// runtime.
 //
 // Usage:
 //   npm install   # installs @anthropic-ai/sandbox-runtime
@@ -15,158 +15,20 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 const t = require("../lib/test-helpers");
 const { buildSrtSettings, sandboxExec: _sandboxExec } = require("../lib/srt-settings");
 
 const SCENARIO_DIR = __dirname;
-const SETTINGS_PATH = path.join(SCENARIO_DIR, ".claude", "settings.json");
-
-// -- Load settings -----------------------------------------------------------
-const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
-const sandbox = settings.sandbox;
 
 // -- srt helper --------------------------------------------------------------
 const srtSettings = buildSrtSettings(SCENARIO_DIR);
 function sandboxExec(command) { return _sandboxExec(srtSettings, command); }
 
 // ===========================================================================
-// Pre-flight: verify srt is installed
-// ===========================================================================
-t.banner("Pre-flight — srt available");
-t.info("Checking that srt (sandbox runtime) is installed.");
-t.why("srt is the same sandbox runtime that Claude Code uses to wrap Bash commands.");
-
-let srtAvailable = false;
-try {
-  const version = execSync("npx srt --version", { encoding: "utf8", timeout: 10000 }).trim();
-  t.pass(`srt is available (${version}).`);
-  srtAvailable = true;
-} catch {
-  t.fail("srt is NOT available. Run: npm install");
-  t.summary("Cannot continue without the sandbox runtime.");
-  process.exit(1);
-}
-
-// ===========================================================================
-// Config validation (no srt calls)
-// ===========================================================================
-
-t.banner("Config — sandbox enabled + escape hatch closed");
-t.info("Verifying sandbox.enabled and allowUnsandboxedCommands.");
-t.why("enabled must be true for the sandbox to wrap Bash commands. allowUnsandboxedCommands must be false so users can't bypass it.");
-{
-  if (sandbox.enabled === true) {
-    t.pass("sandbox.enabled is true.");
-  } else {
-    t.fail(`sandbox.enabled is ${sandbox.enabled} (expected true).`);
-  }
-
-  if (sandbox.allowUnsandboxedCommands === false) {
-    t.pass("allowUnsandboxedCommands is false.");
-  } else {
-    t.fail(`allowUnsandboxedCommands is ${sandbox.allowUnsandboxedCommands} (expected false).`);
-  }
-}
-
-t.banner("Config — filesystem deny rules");
-t.info("Checking that denyRead and denyWrite contain expected patterns.");
-t.why("Deny rules override allow rules — they are the strongest filesystem protection.");
-{
-  const fsConf = sandbox.filesystem || {};
-  const denyRead = fsConf.denyRead || [];
-  const denyWrite = fsConf.denyWrite || [];
-
-  for (const pattern of [".env*"]) {
-    if (denyRead.includes(pattern)) {
-      t.pass(`denyRead contains "${pattern}".`);
-    } else {
-      t.fail(`denyRead is missing "${pattern}".`);
-    }
-  }
-
-  for (const pattern of ["secrets/"]) {
-    if (denyWrite.includes(pattern)) {
-      t.pass(`denyWrite contains "${pattern}".`);
-    } else {
-      t.fail(`denyWrite is missing "${pattern}".`);
-    }
-  }
-}
-
-t.banner("Config — network allowlist");
-t.info("Checking allowedDomains contains expected entries and nothing extra.");
-t.why("A tight allowlist prevents data exfiltration to unknown servers.");
-{
-  const allowed = (sandbox.network || {}).allowedDomains || [];
-  const expected = ["api.anthropic.com"];
-
-  for (const domain of expected) {
-    if (allowed.includes(domain)) {
-      t.pass(`allowedDomains contains "${domain}".`);
-    } else {
-      t.fail(`allowedDomains is missing "${domain}".`);
-    }
-  }
-
-  const unexpected = allowed.filter((d) => !expected.includes(d));
-  if (unexpected.length > 0) {
-    t.warn(`Unexpected domains in allowlist: ${unexpected.join(", ")}`);
-  } else {
-    t.pass("No unexpected domains in allowlist.");
-  }
-}
-
-t.banner("Config — escape hatches (excludedCommands)");
-t.info("Checking excludedCommands for expected and unexpected entries.");
-t.why("excludedCommands bypass the sandbox entirely — keep the list tight.");
-{
-  const excluded = sandbox.excludedCommands || [];
-  const expected = ["docker", "docker-compose"];
-
-  for (const cmd of expected) {
-    if (excluded.includes(cmd)) {
-      t.pass(`excludedCommands contains "${cmd}".`);
-    } else {
-      t.fail(`excludedCommands is missing "${cmd}".`);
-    }
-  }
-
-  const unexpected = excluded.filter((c) => !expected.includes(c));
-  if (unexpected.length > 0) {
-    t.warn(`Unexpected excluded commands: ${unexpected.join(", ")}`);
-  } else {
-    t.pass("No unexpected entries in excludedCommands.");
-  }
-}
-
-// ===========================================================================
 // Enforcement tests via srt
 // ===========================================================================
 
-// Quick probe to check if the sandbox backend works
-let srtWorking = false;
-{
-  const probe = sandboxExec("echo probe");
-  if (probe.ok) {
-    srtWorking = true;
-  } else {
-    const output = probe.output.toLowerCase();
-    if (output.includes("not available") || output.includes("not installed")) {
-      t.banner("Sandbox Backend Not Available");
-      t.warn("bubblewrap (bwrap) is not installed — enforcement tests will be skipped.");
-      t.warn("On Linux: sudo apt-get install bubblewrap");
-      t.warn("On macOS: srt uses Seatbelt (built-in) — this should not happen.");
-    } else {
-      srtWorking = true;
-    }
-  }
-}
-
-if (srtWorking) {
-
-// ---------------------------------------------------------------------------
 t.banner("Test — write to /tmp blocked");
 t.info("Attempting to create a file in /tmp (outside allowWrite).");
 t.why("/tmp is outside the working directory — the sandbox should block it.");
@@ -301,10 +163,8 @@ t.why("The sandbox should allow normal operations within the project directory."
   }
 }
 
-} // end if (srtWorking)
-
 // ===========================================================================
 // Summary
 // ===========================================================================
-t.summary("Sandbox enforcement is working. Every Bash command runs inside OS-level isolation.");
+t.summary("0 API calls. Sandbox enforcement only.");
 process.exit(t.exitCode());

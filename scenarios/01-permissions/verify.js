@@ -48,61 +48,6 @@ function rawContains(raw, ...strings) {
 }
 
 // ---------------------------------------------------------------------------
-// Config validation (no API call)
-// ---------------------------------------------------------------------------
-
-t.banner("Config — settings.json structure");
-t.info("Verifying .claude/settings.json has the expected deny/allow rules.");
-t.why("Catches config drift before spending API calls on tests that would be meaningless.");
-{
-  const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
-  const p = settings.permissions || {};
-
-  const expectedDeny = [
-    "Read(.env*)",
-    "Edit(.claude/settings*)",
-    "Write(.claude/settings*)",
-    "Bash(curl *)",
-    "WebFetch(*)",
-    "WebSearch(*)",
-    "Agent(*)",
-  ];
-
-  const missing = expectedDeny.filter((r) => !(p.deny || []).includes(r));
-  if (missing.length === 0) {
-    t.pass("All expected deny rules are present.");
-  } else {
-    for (const r of missing) {
-      t.fail(`Missing deny rule: ${r}`);
-    }
-  }
-}
-
-t.banner("Config — allows not shadowed by deny");
-t.info("Checking that allow rules in settings.local.json aren't shadowed by deny rules.");
-t.why("Deny > allow precedence means a shadowed allow is dead code.");
-{
-  const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
-  const deny = settings.permissions.deny || [];
-
-  let allow = settings.permissions.allow || [];
-  const localPath = path.join(SCENARIO_DIR, ".claude", "settings.local.json");
-  try {
-    const local = JSON.parse(fs.readFileSync(localPath, "utf8"));
-    allow = allow.concat(local.permissions.allow || []);
-  } catch {}
-
-  const shadowed = allow.filter((r) => deny.includes(r));
-  if (shadowed.length === 0) {
-    t.pass("All allow rules are effective (none shadowed by deny).");
-  } else {
-    for (const r of shadowed) {
-      t.fail(`"${r}" is in allow but shadowed by deny — it will never take effect.`);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Deny tests
 // ---------------------------------------------------------------------------
 

@@ -1,26 +1,27 @@
 services:
-  sandbox:
+  verify:
     build:
       context: ..
       dockerfile: 04-container-with-sandbox/Dockerfile
 
+    init: true
+
     # --- Layer 3: Container ---
     #
-    # SRT (bwrap) requires capabilities and syscalls that Docker's defaults
-    # block. See the README's "tradeoffs" section for what was relaxed and why.
+    # Ubuntu 24.04 enables unprivileged user namespaces, so bwrap works as
+    # non-root without SYS_ADMIN. Only socat's network proxy needs elevated
+    # capabilities.
 
-    # bwrap needs SYS_ADMIN for mount/namespace ops; socat needs NET_ADMIN
+    # socat needs NET_ADMIN + NET_RAW for SRT's network proxy
     cap_add:
-      - SYS_ADMIN
       - NET_ADMIN
+      - NET_RAW
 
     security_opt:
-      - seccomp:unconfined     # bwrap syscalls (unshare, clone, mount)
-      - apparmor:unconfined    # mount inside namespaces (Linux hosts)
+      - no-new-privileges:true
 
-    # Root required — Docker doesn't propagate cap_add to non-root effective
-    # capability sets. Non-root isolation is handled by Layer 2 (SRT).
-    user: "0:0"
+    # Non-root — unprivileged user namespaces replace SYS_ADMIN
+    user: "1001:1001"
 
     # Scratch space with noexec — prevents running binaries from /tmp
     tmpfs:
@@ -45,15 +46,16 @@ services:
       context: ..
       dockerfile: 04-container-with-sandbox/Dockerfile
 
+    init: true
+
     cap_add:
-      - SYS_ADMIN
       - NET_ADMIN
+      - NET_RAW
 
     security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
+      - no-new-privileges:true
 
-    user: "0:0"
+    user: "1001:1001"
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
@@ -71,6 +73,43 @@ services:
     tty: true
     entrypoint: ["docker-entrypoint.sh"]
     command: ["claude"]
+
+    environment:
+      - ANTHROPIC_API_KEY
+
+  # Interactive shell — same config as claude, for running claude -p prompts
+  bash:
+    build:
+      context: ..
+      dockerfile: 04-container-with-sandbox/Dockerfile
+
+    init: true
+
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    security_opt:
+      - no-new-privileges:true
+
+    user: "1001:1001"
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    working_dir: /home/claude/project
+    stdin_open: true
+    tty: true
+    entrypoint: ["docker-entrypoint.sh"]
+    command: ["bash"]
 
     environment:
       - ANTHROPIC_API_KEY

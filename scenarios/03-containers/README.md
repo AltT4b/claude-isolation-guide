@@ -13,18 +13,20 @@ The compose file defines two services from the same Dockerfile:
 | Service | Purpose | Network | Read-only root | Use |
 |---------|---------|---------|---------------|-----|
 | `claude` | Interactive Claude Code | Bridge (API access) | No | `docker compose run --rm claude` |
-| `sandbox` | Verification tests | `none` (all blocked) | Yes | `docker compose run --rm sandbox` |
+| `bash` | Interactive shell for `claude -p` prompts | Bridge (API access) | No | `docker compose run --rm bash` |
+| `verify` | Verification tests | `none` (all blocked) | Yes | `docker compose run --rm verify` |
 
-Both services share four hardening controls:
+Both services share five hardening controls:
 
 | Control | Docker flag | What it prevents |
 |---------|------------|-----------------|
+| Init process | `init: true` | Zombie process accumulation — tini reaps orphaned children |
 | Drop capabilities | `cap_drop: [ALL]` | No raw sockets, no mount, no kernel tricks |
 | No privilege escalation | `security_opt: [no-new-privileges:true]` | setuid binaries can't escalate to root |
 | Non-root user | `user: "1001:1001"` | Container escape gives attacker limited user, not root |
 | Resource limits | `deploy.resources.limits` | No OOM-killing the host or starving other containers |
 
-The `sandbox` service adds two more for maximum lockdown:
+The `verify` service adds two more for maximum lockdown:
 
 | Control | Docker flag | Why `claude` can't use it |
 |---------|------------|--------------------------|
@@ -69,6 +71,8 @@ services:
   claude:
     build: .
 
+    init: true
+
     cap_drop:
       - ALL
 
@@ -103,8 +107,10 @@ services:
       - ANTHROPIC_API_KEY
 
   # Verification tests — maximum lockdown (no network, read-only root)
-  sandbox:
+  verify:
     build: .
+
+    init: true
 
     cap_drop:
       - ALL
@@ -134,22 +140,43 @@ services:
 
 **Per-setting annotations:**
 
+- **`init: true`** — Runs [tini](https://github.com/krallin/tini) as PID 1. Without it, if node or Claude Code crashes, orphaned child processes become zombies that accumulate until the container is killed. Tini reaps them automatically.
 - **`cap_drop: [ALL]`** — Drops every Linux capability. No raw sockets, no mount, no kernel namespace tricks. This is what prevents bwrap from running inside the container.
 - **`security_opt: [no-new-privileges:true]`** — Blocks setuid binaries from escalating to root. Without this, a setuid binary inside the container could regain capabilities that `cap_drop` removed.
-- **`read_only: true`** (sandbox only) — Makes the root filesystem read-only. Prevents persistent backdoors, config tampering, or writing malicious scripts to disk. Not used on the `claude` service because Claude Code writes runtime state to the home directory.
+- **`read_only: true`** (verify only) — Makes the root filesystem read-only. Prevents persistent backdoors, config tampering, or writing malicious scripts to disk. Not used on the `claude` service because Claude Code writes runtime state to the home directory.
 - **`tmpfs: /tmp:rw,noexec,nosuid,size=256m`** — Writable scratch space for temp files, but `noexec` prevents running binaries from /tmp and size is capped.
 - **`user: "1001:1001"`** — Runs as non-root. If the container is compromised, the attacker gets a limited user, not root.
-- **`network_mode: none`** (sandbox only) — Disables all networking. The container has no network interfaces except loopback. Not used on the `claude` service because it connects to the Anthropic API.
+- **`network_mode: none`** (verify only) — Disables all networking. The container has no network interfaces except loopback. Not used on the `claude` service because it connects to the Anthropic API.
 - **`deploy.resources.limits`** — Caps CPU at 2 cores and memory at 4 GB. Prevents a runaway process from OOM-killing the host or starving other containers.
 
 ### `Dockerfile`
 
 ```dockerfile
-FROM node:20-slim
+FROM ubuntu:24.04
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Node.js via fnm
+ARG NODE_VERSION=20
+ENV FNM_DIR="/usr/local/fnm"
+RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- \
+      --install-dir "$FNM_DIR" --skip-shell && \
+    export PATH="$FNM_DIR:$PATH" && \
+    eval "$($FNM_DIR/fnm env)" && \
+    fnm install ${NODE_VERSION} && \
+    fnm default ${NODE_VERSION}
+
+ENV PATH="/usr/local/fnm/aliases/default/bin:${FNM_DIR}:${PATH}"
+
+# npm supply chain hardening
+ENV NPM_CONFIG_IGNORE_SCRIPTS=true \
+    NPM_CONFIG_AUDIT=true \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_SAVE_EXACT=true \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_MINIMUM_RELEASE_AGE=1440
 
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -174,18 +201,18 @@ CMD ["test"]
 ## Run It
 
 ```bash
-# Build the image (shared by both services)
+# Build the image (shared by all services)
 docker compose build
 
 # Launch Claude Code interactively
 export ANTHROPIC_API_KEY=sk-ant-...
 docker compose run --rm claude
 
-# Run the verification tests (no API key needed)
-docker compose run --rm sandbox
+# Drop into a shell to run claude -p prompts (see Prompts section below)
+docker compose run --rm bash
 
-# Drop into a shell to explore the hardened environment
-docker compose run --rm sandbox bash
+# Run the verification tests (no API key needed)
+docker compose run --rm verify
 ```
 
 ## What You'll See
@@ -194,7 +221,7 @@ docker compose run --rm sandbox bash
 
 Claude Code starts interactively inside the hardened container. Four controls are active: capabilities dropped, no privilege escalation, non-root user, and resource limits. Network is bridge (API access) and the filesystem is writable (Claude Code writes runtime state to the home directory).
 
-### Sandbox service
+### Verify service
 
 The verify script runs 13 checks. Expected output: **13 passed, 0 failed**.
 
@@ -223,8 +250,8 @@ The verify script runs 13 checks. Expected output: **13 passed, 0 failed**.
 You can verify individual controls manually by starting a shell in the hardened container:
 
 ```bash
-# Start a shell in the hardened container (no network)
-docker compose run --rm sandbox bash
+# Start a shell in the hardened container
+docker compose run --rm bash
 
 # Check Claude is installed
 claude --version
@@ -249,17 +276,52 @@ echo test > /tmp/test-file && cat /tmp/test-file    # works
 cp /bin/echo /tmp/ && /tmp/echo hello                # blocked by noexec
 ```
 
+## Prompts
+
+You can also test container enforcement by sending prompts through `claude -p`. These hit the API and let Claude attempt operations — the container controls constrain what succeeds at the OS level.
+
+First, start a shell in the hardened container:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+docker compose run --rm bash
+```
+
+Every API test runs the same way:
+
+```
+claude -p "<prompt>" --output-format json --max-turns 2
+```
+
+These are the exact prompts, the container control each one exercises, and what to look for in the response:
+
+```bash
+# container-probes — cap_drop, non-root user, resource limits
+# Content-based: response should show UID != 0, CapEff = all zeros, memory limit in bytes
+claude -p "Run these exact bash commands and show the full output: id && grep CapEff /proc/self/status && cat /sys/fs/cgroup/memory.max" --output-format json --max-turns 2
+
+# tmpfs-noexec — /tmp is writable but noexec blocks binary execution
+# Content-based: echo to /tmp succeeds, but executing a copied binary from /tmp fails with "Permission denied"
+claude -p "Run these exact bash commands and show the full output: echo test > /tmp/noexec-test && cat /tmp/noexec-test && cp /bin/echo /tmp/myecho && /tmp/myecho hello" --output-format json --max-turns 2
+
+# in-container — /.dockerenv exists, proving we're inside Docker
+# Content-based: response should confirm /.dockerenv exists
+claude -p "Run this exact bash command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2
+```
+
+These prompts don't test *deny* rules — scenario 03 has no permissions or sandbox config. They demonstrate that Claude operates inside the hardened container and observes its OS-level constraints: dropped capabilities, non-root user, memory limits, and noexec tmpfs.
+
 ## Break It on Purpose
 
 The tests prove the hardening controls are active. But how do you know the tests aren't just passing trivially? Remove a control and watch it fail.
 
 ### 1. Remove `cap_drop: [ALL]`
 
-Open `docker-compose.yml` and delete the `cap_drop` block from the `sandbox` service:
+Open `docker-compose.yml` and delete the `cap_drop` block from the `verify` service:
 
 ```diff
  services:
-   sandbox:
+   verify:
      build: .
 -
 -    cap_drop:
@@ -273,7 +335,7 @@ Open `docker-compose.yml` and delete the `cap_drop` block from the `sandbox` ser
 
 ```bash
 docker compose build
-docker compose run --rm sandbox
+docker compose run --rm verify
 ```
 
 You'll see two failures:
@@ -309,17 +371,31 @@ If you use VS Code Dev Containers or GitHub Codespaces, the same controls go in 
 {
   "name": "Claude Code - Hardened",
   "build": { "dockerfile": "Dockerfile" },
-  "remoteUser": "node",
+  "init": true,
+  "remoteUser": "claude",
   "runArgs": [
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
     "--tmpfs=/tmp:rw,noexec,nosuid",
+    "--memory=4g",
+    "--cpus=2",
     "--network=none"
-  ]
+  ],
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/claude/.gitconfig,type=bind,readonly"
+  ],
+  "containerEnv": {
+    "NPM_CONFIG_IGNORE_SCRIPTS": "true",
+    "NPM_CONFIG_AUDIT": "true",
+    "NPM_CONFIG_FUND": "false",
+    "NPM_CONFIG_SAVE_EXACT": "true",
+    "NPM_CONFIG_UPDATE_NOTIFIER": "false",
+    "NPM_CONFIG_MINIMUM_RELEASE_AGE": "1440"
+  }
 }
 ```
 
-Same security controls, different format. The devcontainer spec doesn't support `deploy.resources` directly — use `--memory=4g` and `--cpus=2` in `runArgs` instead. Note: `--read-only` and `--network=none` are shown here for the verification equivalent; for interactive Claude use, omit both.
+Same security controls, different format. Note: `--read-only` and `--network=none` are shown here for the verification equivalent; for interactive Claude use, omit both. The `mounts` section bind-mounts host gitconfig as read-only — prevents the container from modifying your git identity.
 
 ## Cost
 

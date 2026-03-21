@@ -8,8 +8,8 @@ Testable scenarios for the controls that keep [Claude Code](https://docs.anthrop
 |----------|--------------|----------|
 | **[01 — Permissions](scenarios/01-permissions/)** | `permissions.deny` rules that block Claude's built-in tools (Read, Edit, WebFetch, etc.) | `npm test` |
 | **[02 — Sandbox](scenarios/02-sandbox/)** | `sandbox.*` settings that control what Bash can touch on disk and reach on the network | `npm test` |
-| **[03 — Containers](scenarios/03-containers/)** | Docker hardening flags that enforce isolation at the container level | `docker compose run --rm sandbox` |
-| **[04 — Container with Sandbox](scenarios/04-container-with-sandbox/)** | All 3 layers (permissions + sandbox + container) working together — defense-in-depth | `docker compose run --rm sandbox` |
+| **[03 — Containers](scenarios/03-containers/)** | Docker hardening flags that enforce isolation at the container level | `docker compose run --rm verify` |
+| **[04 — Container with Sandbox](scenarios/04-container-with-sandbox/)** | All 3 layers (permissions + sandbox + container) working together — defense-in-depth | `docker compose run --rm verify` |
 
 **Start here:** If you're locking down a project, start with [01 — Permissions](scenarios/01-permissions/) (tool-level controls) and [02 — Sandbox](scenarios/02-sandbox/) (Bash-level controls). If you're running Claude inside Docker, go straight to [03 — Containers](scenarios/03-containers/). To see all layers working together, try [04 — Container with Sandbox](scenarios/04-container-with-sandbox/).
 
