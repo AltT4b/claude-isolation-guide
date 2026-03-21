@@ -1,78 +1,4 @@
 services:
-  verify:
-    build:
-      context: ..
-      dockerfile: 03-containers/Dockerfile
-
-    init: true
-
-    cap_drop:
-      - ALL
-
-    security_opt:
-      - no-new-privileges:true
-
-    read_only: true
-
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-
-    user: "1001:1001"
-
-    network_mode: none
-
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4G
-        reservations:
-          memory: 1G
-
-    working_dir: /home/claude/project
-
-  claude:
-    build:
-      context: ..
-      dockerfile: 03-containers/Dockerfile
-
-    init: true
-
-    cap_drop:
-      - ALL
-
-    security_opt:
-      - no-new-privileges:true
-
-    # read_only not set — Claude Code needs to write runtime state to ~/.claude,
-    # ~/.config, etc. The other 5 controls still enforce isolation.
-
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=256m
-
-    user: "1001:1001"
-
-    # Bridge networking — Claude needs to reach api.anthropic.com
-    # network_mode: none is NOT set here (see verify service for locked-down tests)
-
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4G
-        reservations:
-          memory: 1G
-
-    working_dir: /home/claude/project
-    stdin_open: true
-    tty: true
-    entrypoint: ["docker-entrypoint.sh"]
-    command: ["claude"]
-
-    environment:
-      - ANTHROPIC_API_KEY
-
-  # Interactive shell — same hardening as claude, for running claude -p prompts
   bash:
     build:
       context: ..
@@ -102,8 +28,4 @@ services:
     working_dir: /home/claude/project
     stdin_open: true
     tty: true
-    entrypoint: ["docker-entrypoint.sh"]
-    command: ["bash"]
-
-    environment:
-      - ANTHROPIC_API_KEY
+    command: ["/bin/bash"]

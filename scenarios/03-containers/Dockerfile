@@ -4,7 +4,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates unzip && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Node.js via fnm (matching scenario 04's approach)
+# Install Node.js via fnm
 ARG NODE_VERSION=20
 ENV FNM_DIR="/usr/local/fnm"
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "$FNM_DIR" --skip-shell && \
@@ -32,18 +32,11 @@ RUN groupadd --gid 1001 claude && \
 
 WORKDIR /home/claude/project
 
-COPY 03-containers/package.json ./
-RUN npm install --ignore-scripts
-
-COPY lib/ /home/claude/lib/
-COPY lib/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-COPY 03-containers/verify.js 03-containers/docker-compose.yml ./
+# Make format-result.js available for test output formatting
+COPY lib/format-result.js /home/claude/lib/format-result.js
 
 RUN chown -R claude:claude /home/claude
 
 USER claude
 
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["test"]
+CMD ["/bin/bash"]
