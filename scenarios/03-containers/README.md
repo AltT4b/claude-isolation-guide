@@ -1,6 +1,6 @@
 # Scenario 03 — Containers
 
-Run Claude Code inside a hardened Docker container. The container enforces isolation at the OS level — dropped capabilities, non-root user, memory caps, noexec tmpfs — controls that work even if every voluntary setting (permissions, sandbox rules) is bypassed.
+Run Claude Code inside a hardened Docker container. The container enforces isolation at the OS level — non-root user, dropped capabilities, noexec tmpfs, resource limits — controls that work even if every voluntary setting (permissions, sandbox rules) is bypassed.
 
 Every test follows the same rhythm:
 
@@ -17,7 +17,7 @@ Break/Restore requires exiting the container and rebuilding each time. The frict
 
 ## Cost
 
-Each `claude -p` command is one API call. Running every command in this guide: ~5 calls, a few cents.
+Each `claude -p` command is one API call. Running every command in this guide: ~6 calls, a few cents.
 
 ## Configuration
 
@@ -147,11 +147,10 @@ claude login
 
 | # | Test | Control | What it proves |
 |---|------|---------|---------------|
-| 1 | [Non-root user](#test-1--non-root-user) | `user: "1001:1001"` | Container runs as limited user, not root |
-| 2 | [Capabilities dropped](#test-2--capabilities-dropped) | `cap_drop: [ALL]` | No kernel-level operations available |
-| 3 | [Resource limits](#test-3--resource-limits) | `deploy.resources.limits.memory` | Memory capped at 4GB, not unlimited |
-| 4 | [tmpfs noexec](#test-4--tmpfs-noexec) | `tmpfs: /tmp:rw,noexec,...` | Writing to /tmp works, executing from /tmp fails |
-| 5 | [Container detection](#test-5--container-detection-positive-control) | _(none)_ | Confirms we're inside Docker |
+| 1 | [Non-root user](#test-1--non-root-user) | `user: "1001:1001"` | No sudo, no writing outside home, no global installs |
+| 2 | [Capabilities dropped](#test-2--capabilities-dropped) | `cap_drop: [ALL]` | Kernel-level operations blocked (e.g., raw sockets) |
+| 3 | [tmpfs noexec](#test-3--tmpfs-noexec) | `tmpfs: /tmp:rw,noexec,...` | Can write to /tmp but can't execute from it |
+| 4 | [Container detection](#test-4--container-detection-positive-control) | _(none)_ | Confirms we're inside Docker |
 
 ---
 
@@ -176,10 +175,11 @@ Inside the container, the pipe syntax is `| node ../lib/format-result.js` — th
 Copy-paste block. Run from inside the container.
 
 ```bash
-claude -p "Run this exact bash command and show the full output: id" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command and show the full output: grep CapEff /proc/self/status" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command and show the full output: cat /sys/fs/cgroup/memory.max" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run these exact bash commands and show the full output: echo test > /tmp/noexec-test && cat /tmp/noexec-test && cp /bin/echo /tmp/myecho && /tmp/myecho hello" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Install vim using sudo" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Create a file at /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Install cowsay globally with npm" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Ping 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Write a bash script to /tmp/hello.sh that prints hello, make it executable, and run it" --output-format json --max-turns 2 | node ../lib/format-result.js
 claude -p "Run this exact bash command and show the output: ls -la /.dockerenv" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
@@ -193,15 +193,33 @@ claude -p "Run this exact bash command and show the output: ls -la /.dockerenv" 
 
 > **Control:** User namespace
 > **Docker flag:** `user: "1001:1001"`
-> **What it prevents:** Container escape gives attacker limited user, not root
+> **What it prevents:** Privilege escalation, filesystem writes outside home, global package installs
 
-**Try it:**
+Three prompts, one control. Each demonstrates a different consequence of running as a non-root user.
+
+**1a — Try to install a package with sudo:**
 
 ```bash
-claude -p "Run this exact bash command and show the full output: id" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Install vim using sudo" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Look for `uid=1001` in the output. If you see `uid=0`, the container is running as root.
+Claude tries `sudo` and gets `sudo: not found`. The escalation path doesn't exist in the image.
+
+**1b — Try to write outside the user's home:**
+
+```bash
+claude -p "Create a file at /root/test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+Permission denied. The container user can't write to `/root` or other system directories.
+
+**1c — Try to install a global npm package:**
+
+```bash
+claude -p "Install cowsay globally with npm" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+EACCES on the global prefix. The container is immutable from the inside — Claude can't augment it with new dependencies.
 
 **Break it:** In `docker-compose.yml`, remove the `user: "1001:1001"` line. Then:
 
@@ -211,7 +229,7 @@ docker compose build
 docker compose run --rm bash
 ```
 
-Re-run the command. Now `id` shows `uid=0(root)`.
+Re-run all three. As root: sudo equivalent power exists, `/root/test.txt` writes succeed, global npm installs work.
 
 **Restore:** Add `user: "1001:1001"` back to `docker-compose.yml`. Exit, rebuild, re-enter.
 
@@ -221,15 +239,15 @@ Re-run the command. Now `id` shows `uid=0(root)`.
 
 > **Control:** Linux capabilities
 > **Docker flag:** `cap_drop: [ALL]`
-> **What it prevents:** No raw sockets, no mount, no kernel namespace tricks
+> **What it prevents:** Raw sockets, mount, kernel namespace tricks
 
 **Try it:**
 
 ```bash
-claude -p "Run this exact bash command and show the full output: grep CapEff /proc/self/status" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Ping 8.8.8.8" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Look for `CapEff:` followed by `0000000000000000` (all zeros). This means every capability has been dropped.
+`ping` needs `CAP_NET_RAW` to open a raw socket. All capabilities are dropped, so it fails with "Operation not permitted".
 
 **Break it:** Remove the `cap_drop: [ALL]` block from `docker-compose.yml`. Then:
 
@@ -239,53 +257,25 @@ docker compose build
 docker compose run --rm bash
 ```
 
-Re-run the command. `CapEff` now shows a non-zero value — the container has kernel capabilities.
+Re-run the command. Ping succeeds — the container has its default capabilities back.
 
 **Restore:** Add `cap_drop: [ALL]` back. Exit, rebuild, re-enter.
 
 ---
 
-### Test 3 · Resource limits
-
-> **Control:** cgroup memory limit
-> **Docker flag:** `deploy.resources.limits.memory: 4G`
-> **What it prevents:** Runaway process OOM-killing the host
-
-**Try it:**
-
-```bash
-claude -p "Run this exact bash command and show the full output: cat /sys/fs/cgroup/memory.max" --output-format json --max-turns 2 | node ../lib/format-result.js
-```
-
-Look for a number in bytes: `4294967296` (4GB). If you see the word `max`, there's no memory limit.
-
-**Break it:** Remove the entire `deploy:` block from `docker-compose.yml`. Then:
-
-```bash
-exit
-docker compose build
-docker compose run --rm bash
-```
-
-Re-run the command. Now it shows `max` — the container has unlimited memory.
-
-**Restore:** Add the `deploy:` block back. Exit, rebuild, re-enter.
-
----
-
-### Test 4 · tmpfs noexec
+### Test 3 · tmpfs noexec
 
 > **Control:** Mount flags on /tmp
 > **Docker flag:** `tmpfs: /tmp:rw,noexec,nosuid,size=256m`
-> **What it prevents:** Executing downloaded binaries from /tmp
+> **What it prevents:** Executing downloaded or crafted binaries from /tmp
 
 **Try it:**
 
 ```bash
-claude -p "Run these exact bash commands and show the full output: echo test > /tmp/noexec-test && cat /tmp/noexec-test && cp /bin/echo /tmp/myecho && /tmp/myecho hello" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Write a bash script to /tmp/hello.sh that prints hello, make it executable, and run it" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-The `echo`/`cat` succeeds — writing to /tmp works. But executing the copied binary (`/tmp/myecho hello`) fails with "Permission denied". That's `noexec` doing its job.
+Claude writes the script and sets the executable bit — both succeed. But running it fails with "Permission denied". The `noexec` mount flag blocks execution from `/tmp` regardless of file permissions.
 
 **Break it:** In `docker-compose.yml`, change the tmpfs line to `/tmp:rw,nosuid,size=256m` (remove `noexec`). Then:
 
@@ -295,13 +285,13 @@ docker compose build
 docker compose run --rm bash
 ```
 
-Re-run the command. Now `/tmp/myecho hello` succeeds — binaries can execute from /tmp.
+Re-run the command. The script executes and prints "hello".
 
 **Restore:** Add `noexec` back to the tmpfs flags. Exit, rebuild, re-enter.
 
 ---
 
-### Test 5 · Container detection (positive control)
+### Test 4 · Container detection (positive control)
 
 > **Control:** _(none — this test is supposed to succeed)_
 > **Proves:** Claude is running inside Docker, not on the host
@@ -320,14 +310,16 @@ Container controls enforce at the OS level — they work even if every voluntary
 
 Break/Restore required a rebuild each time. That's the tradeoff: container isolation is heavier to change than a settings.json edit, but it's also heavier to circumvent. An attacker who compromises Claude Code can edit `settings.json` from inside the process. They can't edit `docker-compose.yml` and rebuild from inside the container.
 
-| Control | Docker flag | What it enforces |
-|---------|------------|-----------------|
-| Non-root user | `user: "1001:1001"` | Limited user, not root |
-| Capabilities | `cap_drop: [ALL]` | No kernel-level operations |
-| Resource limits | `deploy.resources.limits` | CPU and memory caps |
-| tmpfs noexec | `tmpfs: /tmp:rw,noexec,...` | No binary execution from /tmp |
-| Init process | `init: true` | Zombie process reaping (not tested — hard to demo) |
-| No privilege escalation | `security_opt: [no-new-privileges:true]` | setuid binaries can't escalate (not tested — requires fixture) |
+| Control | Docker flag | What it enforces | Tested? |
+|---------|------------|-----------------|---------|
+| Non-root user | `user: "1001:1001"` | No sudo, no writes outside home, no global installs | Yes (Test 1) |
+| Capabilities | `cap_drop: [ALL]` | No raw sockets, no mount, no kernel tricks | Yes (Test 2) |
+| tmpfs noexec | `tmpfs: /tmp:rw,noexec,...` | No binary execution from /tmp | Yes (Test 3) |
+| Resource limits | `deploy.resources.limits` | Kernel-enforced CPU and memory ceiling — a runaway process gets OOM-killed instead of starving the host | Config only |
+| Init process | `init: true` | Tini reaps zombie processes — prevents accumulation after crashes | Config only |
+| No privilege escalation | `security_opt: [no-new-privileges:true]` | Blocks setuid binaries from regaining dropped capabilities | Config only |
+
+The three config-only controls matter but can't be demonstrated naturally in a tutorial. Resource limits in particular are a key benefit of containerization — they're the only layer that gives you a kernel-enforced memory and CPU ceiling that no `settings.json` edit can bypass.
 
 ---
 
