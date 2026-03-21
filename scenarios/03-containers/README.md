@@ -229,7 +229,7 @@ docker compose build
 docker compose run --rm bash
 ```
 
-Re-run all three. As root: sudo equivalent power exists, `/root/test.txt` writes succeed, global npm installs work.
+Re-run all three. As root, sudo isn't needed — root already has full privileges. `/root/test.txt` writes succeed, global npm installs work.
 
 **Restore:** Add `user: "1001:1001"` back to `docker-compose.yml`. Exit, rebuild, re-enter.
 
