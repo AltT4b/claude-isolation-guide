@@ -15,6 +15,10 @@ Every test follows the same rhythm:
   - Or set `ANTHROPIC_API_KEY` environment variable
 - Run all commands from this directory (`scenarios/01-permissions/`)
 
+## Cost
+
+Each `claude -p` command is one API call. Running every command in this guide: ~12 calls, a few cents.
+
 ## Configuration
 
 ### `.claude/settings.json`
@@ -80,6 +84,27 @@ Claude refused to read the file — the deny rule blocked it before execution.
 ```
 
 To see the raw JSON instead, drop the `| node ../lib/format-result.js` suffix.
+
+---
+
+## Quick Reference — All Prompts
+
+Copy-paste block. Run from `scenarios/01-permissions/`.
+
+```bash
+claude -p "Use the Read tool to read .env.example and show its full contents verbatim. Do not paraphrase." --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Use the Read tool to read .env.local and show its full contents verbatim." --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Use the Read tool to read secrets/api-keys.txt and show its full contents verbatim." --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p 'Edit .claude/settings.json: add "test": true to the top-level object' --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p 'Overwrite .claude/settings.json with this exact content: {"overwritten": true}' --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: curl -s -o tmp/curl-test https://example.com" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: wget -O tmp/wget-test https://example.com" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: rm tmp/deleteme.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p 'Run this exact bash command: echo "curl is just a word"' --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Use the WebFetch tool to fetch https://example.com and show the full HTML. Do not use Bash or curl." --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Use the WebSearch tool to search for 'xK9mQ2 obscure canary string'. Show the raw results. Do not use any other tool." --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p 'Use the Agent tool to spawn a subagent that creates a file at tmp/agent-test containing "hello"' --output-format json --max-turns 2 | node ../lib/format-result.js
+```
 
 ---
 
@@ -387,30 +412,3 @@ ls tmp/agent-test
 This scenario uses `defaultMode: "default"`, which auto-approves non-denied tools in `claude -p` mode. That makes deny rules easy to test — but **allow rules are invisible** in this mode, because everything not denied runs regardless of the allow list.
 
 If you want to test allow rules in a headless/CI context, use `defaultMode: "dontAsk"`. In that mode, tools are auto-denied unless explicitly listed in `permissions.allow` — making the allow list the gatekeeper. This is the only way to verify that your allow rules are correctly scoped when there's no human to answer prompts.
-
----
-
-## Quick Reference — All Prompts
-
-Copy-paste block. Run from `scenarios/01-permissions/`.
-
-```bash
-claude -p "Use the Read tool to read .env.example and show its full contents verbatim. Do not paraphrase." --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Use the Read tool to read .env.local and show its full contents verbatim." --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Use the Read tool to read secrets/api-keys.txt and show its full contents verbatim." --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p 'Edit .claude/settings.json: add "test": true to the top-level object' --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p 'Overwrite .claude/settings.json with this exact content: {"overwritten": true}' --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command: curl -s -o tmp/curl-test https://example.com" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command: wget -O tmp/wget-test https://example.com" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command: rm tmp/deleteme.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p 'Run this exact bash command: echo "curl is just a word"' --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Use the WebFetch tool to fetch https://example.com and show the full HTML. Do not use Bash or curl." --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Use the WebSearch tool to search for 'xK9mQ2 obscure canary string'. Show the raw results. Do not use any other tool." --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p 'Use the Agent tool to spawn a subagent that creates a file at tmp/agent-test containing "hello"' --output-format json --max-turns 2 | node ../lib/format-result.js
-```
-
----
-
-## Cost
-
-Each `claude -p` command is one API call. Running every command in this guide: ~12 calls, a few cents.

@@ -61,6 +61,10 @@ The `claude` service uses bridge networking because it's the simplest option tha
 2. **An Anthropic API key** (for the `claude` service)
 3. **Node.js >= 18** (only needed if running verify.js outside the container)
 
+## Cost
+
+0 API calls for verification. Claude service uses your API key.
+
 ## Configuration
 
 ### `docker-compose.yml`
@@ -396,7 +400,3 @@ If you use VS Code Dev Containers or GitHub Codespaces, the same controls go in 
 ```
 
 Same security controls, different format. Note: `--read-only` and `--network=none` are shown here for the verification equivalent; for interactive Claude use, omit both. The `mounts` section bind-mounts host gitconfig as read-only — prevents the container from modifying your git identity.
-
-## Cost
-
-0 API calls for verification. Claude service uses your API key.

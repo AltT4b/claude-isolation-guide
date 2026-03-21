@@ -93,6 +93,10 @@ Scenario 03 uses `network_mode: none` — no outbound connections at all. This s
 2. **An Anthropic API key** (for the `claude` service)
 3. **Node.js >= 18** (only needed if running verify.js outside the container)
 
+## Cost
+
+0 API calls for verification. The `claude` service uses your API key. Permission enforcement (Layer 1) is validated via config checks, not `claude -p` calls. To test permissions at runtime, see [Scenario 01](../01-permissions/).
+
 ## Configuration
 
 ### `.claude/settings.json` (project-level, committed)
@@ -451,9 +455,3 @@ Revert all changes. Rebuild and run. All checks should pass.
 ### Why this matters
 
 Breaking one layer proves the other layers keep working independently. That's the definition of defense-in-depth: no single layer is a single point of failure.
-
-## Cost
-
-0 API calls for verification. The `claude` service uses your API key.
-
-Permission enforcement (Layer 1) is validated via config checks, not `claude -p` calls. To test permissions at runtime, see [Scenario 01](../01-permissions/).
