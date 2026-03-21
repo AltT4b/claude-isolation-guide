@@ -1,17 +1,23 @@
 {
+  "permissions": {
+    "deny": [],
+    "allow": [],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "bypassPermissions"
+  },
   "sandbox": {
     "enabled": true,
+    "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
-    "excludedCommands": ["docker", "docker-compose"],
     "filesystem": {
-      "allowRead": [],
-      "denyRead": [".env*"],
-      "allowWrite": ["."],
-      "denyWrite": ["secrets/"]
+      "denyWrite": ["./protected"],
+      "denyRead": ["./sensitive"],
+      "allowRead": ["./sensitive/allowed-readme.txt"],
+      "allowWrite": ["/tmp/sandbox-02"]
     },
     "network": {
-      "allowedDomains": ["api.anthropic.com"],
-      "deniedDomains": []
+      "allowedDomains": ["example.com"]
     }
   }
 }

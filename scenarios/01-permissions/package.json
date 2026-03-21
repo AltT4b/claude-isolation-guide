@@ -1,7 +1,0 @@
-{
-  "name": "01-permissions",
-  "private": true,
-  "scripts": {
-    "test": "node verify.js"
-  }
-}

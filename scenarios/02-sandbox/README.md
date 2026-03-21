@@ -1,231 +1,360 @@
 # Scenario 02 — Sandbox
 
-The sandbox wraps every Bash command in OS-level isolation (bubblewrap on Linux, Seatbelt on macOS). It controls what files Bash can touch and what domains Bash can reach — enforced by the kernel, not by process-level checks.
+The sandbox provides **OS-level** filesystem and network isolation for Bash commands. Unlike permissions (Scenario 01), which control which *tools* Claude can invoke, the sandbox controls what Bash commands can actually *access* — files on disk and domains on the network. Permissions are the bouncer at the door; the sandbox is the locked filing cabinet inside.
 
-## Scope
+This scenario tests five sandbox properties: `denyWrite`, `denyRead`, `allowRead`, `allowWrite`, and `allowedDomains`. Every test uses Bash commands because the sandbox only applies to Bash — Claude's other tools (Read, Edit, Write, WebFetch) bypass the sandbox entirely.
 
-This scenario focuses on **sandbox settings** — the `sandbox.*` section of `.claude/settings.json`. The sandbox only affects the Bash tool. Claude's other tools (Read, Edit, Write, WebFetch, WebSearch, Agent) bypass the sandbox entirely — use [permissions](../01-permissions/) to control those.
+Every test follows the same rhythm:
 
-### Reads vs. writes: different defaults
-
-The sandbox treats reads and writes **asymmetrically** — this is the most important thing to understand about its filesystem model:
-
-| | Default | Block with | Unblock with | Precedence |
-|---|---|---|---|---|
-| **Writes** | Denied | _(already denied)_ | `allowWrite` | `denyWrite` > `allowWrite` |
-| **Reads** | Allowed | `denyRead` | `allowRead` | `allowRead` > `denyRead` |
-
-- **Writes are default-deny.** Nothing is writable unless listed in `allowWrite`. `denyWrite` overrides `allowWrite` — deny beats allow.
-- **Reads are default-allow.** Everything is readable. `denyRead` blocks specific paths. `allowRead` creates exceptions *within* denied regions — allow beats deny. This is the **opposite** precedence from writes.
-
-`allowRead` is not a general allowlist — it's a scalpel for carving exceptions inside `denyRead`. For example, you could deny `~/.aws/` but re-allow `~/.aws/config` (without exposing `~/.aws/credentials`). When empty, it means "no exceptions to `denyRead`."
-
-There is no way to make the sandbox default-deny for reads. If you need to block reads, `denyRead` is your only tool.
-
-See the [official sandbox settings documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for the full reference.
+1. **Try it** — run a `claude -p` command and watch the sandbox block (or allow) it
+2. **Break it** — change that one sandbox setting, re-run, and watch the opposite happen
+3. **Restore it** — put the config back before moving on
 
 ## Prerequisites
 
-1. **Node.js >= 18**
-2. **srt** (sandbox runtime) — installed automatically via `npm install`
-3. On Linux: **bubblewrap** (`sudo apt-get install bubblewrap`)
-4. On macOS: uses Seatbelt (built-in, no extra install)
+- **Claude CLI** authenticated:
+  - OAuth (preferred): `claude login`
+  - Or set `ANTHROPIC_API_KEY` environment variable
+- Run all commands from this directory (`scenarios/02-sandbox/`)
 
 ## Configuration
 
-### `.claude/settings.json` (project-level, committed)
+### `.claude/settings.json`
 
-This file defines the sandbox policy. No permissions rules are set — this scenario only demonstrates sandbox controls.
+This file defines two layers:
+
+1. **Permissions** — `bypassPermissions` mode skips all tool-level prompts. The permission system is invisible — the sandbox is the only thing restricting behavior.
+2. **Sandbox** — OS-level rules that constrain what Bash commands can touch.
 
 ```json
 {
+  "permissions": {
+    "deny": [],
+    "allow": [],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "bypassPermissions"
+  },
   "sandbox": {
     "enabled": true,
+    "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
-    "excludedCommands": ["docker", "docker-compose"],
     "filesystem": {
-      "allowRead": [],
-      "denyRead": [".env*"],
-      "allowWrite": ["."],
-      "denyWrite": ["secrets/"]
+      "denyWrite": ["./protected"],
+      "denyRead": ["./sensitive"],
+      "allowRead": ["./sensitive/allowed-readme.txt"],
+      "allowWrite": ["/tmp/sandbox-02"]
     },
     "network": {
-      "allowedDomains": ["api.anthropic.com"],
-      "deniedDomains": []
+      "allowedDomains": ["example.com"]
     }
   }
 }
 ```
 
-**Per-setting annotations:**
+**Key design choices:**
 
-- **`enabled: true`** — Turns on OS-level sandboxing for all Bash commands.
-- **`allowUnsandboxedCommands: false`** — Prevents users from bypassing the sandbox. The nuclear option — keep it false.
-- **`excludedCommands`** — Commands that bypass the sandbox entirely. Prefix-matched: `"docker"` matches `docker build` and `docker-compose up`. Every entry is a hole in your sandbox.
-- **`allowRead: []`** — Exceptions within `denyRead` regions. Empty means no exceptions. Example: deny `~/.aws/` but re-allow `~/.aws/config`.
-- **`denyRead: [".env*"]`** — Blocks reads of matching paths. Since reads are default-allow, this is the only way to protect sensitive files from `cat`, `head`, etc.
-- **`denyWrite: ["secrets/"]`** — Blocks writes even inside an `allowWrite` path. Deny beats allow.
-- **`allowWrite: ["."]`** — Makes the working directory writable. Without this, nothing is writable — writes are default-deny.
-- **`allowedDomains: ["api.anthropic.com"]`** — Network whitelist. Only these domains are reachable from sandboxed commands. Everything else is blocked.
-- **`deniedDomains`** — Network blacklist that overrides `allowedDomains`. Deny beats allow here too.
+- **`defaultMode: "bypassPermissions"`** — removes the permission layer from the equation entirely. No tool prompts, no allow/deny rules in play. Every test is purely sandbox vs. no sandbox.
+- **`autoAllowBashIfSandboxed: true`** — sandboxed Bash commands run without prompting.
+- **`allowUnsandboxedCommands: false`** — Claude can't use `dangerouslyDisableSandbox` to escape the sandbox.
 
-## Run It
+### How reads and writes differ
+
+The sandbox treats reads and writes **asymmetrically** — this is the most important thing to understand:
+
+| | Default | Block with | Unblock with | Precedence |
+|---|---|---|---|---|
+| **Writes** | Denied everywhere except cwd | _(already denied)_ | `allowWrite` | `denyWrite` > `allowWrite` |
+| **Reads** | Allowed everywhere | `denyRead` | `allowRead` | `allowRead` > `denyRead` |
+
+- **Writes are default-deny.** Only the working directory is writable. `allowWrite` opens additional paths. `denyWrite` overrides `allowWrite` — deny beats allow.
+- **Reads are default-allow.** Everything is readable. `denyRead` blocks specific paths. `allowRead` carves exceptions *within* denied regions — allow beats deny. This is the **opposite** precedence from writes.
+
+### Fixture files
+
+| Path | Purpose |
+|------|---------|
+| `protected/do-not-overwrite.txt` | Write target — should survive denyWrite tests |
+| `sensitive/fake-credentials.txt` | Read target — fake tokens blocked by denyRead |
+| `sensitive/allowed-readme.txt` | Read target — carved out of denyRead by allowRead |
+| `/tmp/sandbox-02/` | Write target — outside cwd, granted by allowWrite |
+| `tmp/` | Scratch space for test artifacts within cwd |
+
+---
+
+## Test Index
+
+| # | Test | Property | What it proves |
+|---|------|----------|---------------|
+| 1 | [Write to protected dir](#test-1--denywrite----block-writes-to-protected-directory) | `denyWrite` | Sandbox blocks Bash writes to denied paths |
+| 2 | [Write to cwd](#test-2--denywrite-negative-control----cwd-is-still-writable) | _(negative control)_ | denyWrite is surgical — cwd still works |
+| 3 | [Read sensitive file](#test-3--denyread----block-reads-from-sensitive-directory) | `denyRead` | Sandbox blocks Bash reads of denied paths |
+| 4 | [Read allowed exception](#test-4--allowread----carve-exception-inside-denyread) | `allowRead` | Punches a hole in denyRead for one file |
+| 5 | [Write to external path](#test-5--allowwrite----grant-writes-beyond-cwd) | `allowWrite` | Extends writable paths outside cwd |
+| 6 | [Write outside project](#test-6--default-deny----writes-outside-cwd-are-blocked) | _(default behavior)_ | Writes are default-deny outside cwd |
+| 7 | [Read outside project](#test-7--default-allow----reads-outside-project-succeed) | _(default behavior)_ | Reads are default-allow everywhere |
+| 8 | [Fetch allowed domain](#test-8--alloweddomains----permitted-network-access) | `allowedDomains` | Allowed domains are reachable |
+| 9 | [Fetch blocked domain](#test-9--alloweddomains----blocked-network-access) | `allowedDomains` | Unlisted domains are blocked |
+
+---
+
+## Output Format
+
+Every `claude -p` command pipes through `../lib/format-result.js`, a small Node script that extracts the human-readable fields from the JSON output:
+
+```
+✓ PASS  (2 turns, 13.8s, $0.0252)
+
+As expected — sandbox says no. The `protected/` directory is in the deny list...
+```
+
+To see the raw JSON instead, drop the `| node ../lib/format-result.js` suffix.
+
+---
+
+## Try It
+
+---
+
+### Test 1 · `denyWrite` — block writes to protected directory
+
+> **Property:** `sandbox.filesystem.denyWrite: ["./protected"]`
+> **Protects:** The `protected/` directory from any Bash write operations
+> **How it works:** The sandbox intercepts filesystem writes at the OS level — the Bash command runs but the write operation fails
+
+**Try it:**
 
 ```bash
-npm install && npm test
+claude -p "Run this exact bash command: echo 'overwritten' > protected/do-not-overwrite.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-## What You'll See
-
-The verify script runs tests in two parts. Expected output: **all passed, 0 failed**.
-
-**Config checks** (no srt calls): validates that `settings.json` has the correct sandbox configuration — enabled flag, deny rules, network allowlist, and escape hatches.
-
-**Enforcement tests** (via srt): runs actual commands through the sandbox runtime to prove it blocks disallowed operations and allows permitted ones.
-
-| Test | What it does | Expected result |
-|------|-------------|-----------------|
-| write to /tmp | `touch /tmp/sandbox-test-*` | Blocked (outside allowWrite) |
-| read .env.example | `cat .env.example` | Blocked (matches denyRead `.env*`) |
-| write to secrets/ | `echo > secrets/test` | Blocked (matches denyWrite `secrets/`) |
-| write to parent dir | `touch ../escape-test` | Blocked (outside allowWrite) |
-| read /etc/hosts | `cat /etc/hosts` | Allowed (reads are open by default, only denyRead blocks) |
-| curl example.com | `curl https://example.com` | Blocked (not in allowedDomains) |
-| curl api.anthropic.com | `curl https://api.anthropic.com` | Allowed (in allowedDomains) |
-| normal file ops in cwd | write/read/delete temp file | Allowed (cwd is in allowWrite) |
-
-## Commands
-
-The enforcement tests write a settings file and run each command through `npx srt`. You can run these yourself from the scenario directory after `npm install`:
+Verify the file survived:
 
 ```bash
-# Write the srt settings file (verify.js does this automatically)
-# srt expects the sandbox config without the "sandbox" wrapper,
-# with relative paths resolved to absolute ones.
-
-# write-to-tmp — should be BLOCKED (outside allowWrite)
-npx srt -s srt-settings.json "touch /tmp/sandbox-test"
-
-# read-env — should be BLOCKED (matches denyRead .env*)
-npx srt -s srt-settings.json "cat $(pwd)/.env.example"
-
-# write-to-secrets — should be BLOCKED (matches denyWrite secrets/)
-npx srt -s srt-settings.json "echo test > $(pwd)/secrets/test-file"
-
-# write-to-parent — should be BLOCKED (outside allowWrite)
-npx srt -s srt-settings.json "touch $(dirname $(pwd))/escape-test"
-
-# read-outside-project — should be ALLOWED (reads are open by default)
-npx srt -s srt-settings.json "cat /etc/hosts"
-
-# curl-blocked-domain — should be BLOCKED (not in allowedDomains)
-npx srt -s srt-settings.json "curl -sf --max-time 5 https://example.com"
-
-# curl-allowed-domain — should be ALLOWED (in allowedDomains)
-# HTTP errors (401/403) are expected without auth — the connection itself is what matters
-npx srt -s srt-settings.json "curl -sf --max-time 5 https://api.anthropic.com"
-
-# normal-file-ops — should be ALLOWED (cwd is in allowWrite)
-npx srt -s srt-settings.json "echo 'hello sandbox' > test-temp && cat test-temp && rm test-temp"
+cat protected/do-not-overwrite.txt
+# Should still contain: original-content-do-not-change
 ```
 
-## Prompts
+**Break it:** Open `.claude/settings.json` and clear the `denyWrite` array (set it to `[]`). Re-run the same command. Now the file gets overwritten — proving the denyWrite rule was the only thing protecting it.
 
-You can also test sandbox enforcement by sending prompts through `claude -p`. Unlike the `npx srt` commands above (which use the sandbox runtime directly), these hit the API and let Claude attempt the operations — the sandbox blocks them at the OS level.
-
-Every API test runs the same way:
-
-```
-claude -p "<prompt>" --output-format json --max-turns 2
-```
-
-These are the exact prompts, the sandbox rule each one exercises, and how the test verifies enforcement:
+**Restore:** Add `"./protected"` back to `denyWrite`. Reset the fixture:
 
 ```bash
-# write-to-tmp — filesystem.allowWrite (outside cwd)
-# Disk-based: /tmp/sandbox-test-claude must not exist after the call
-claude -p "Run this exact bash command: touch /tmp/sandbox-test-claude" --output-format json --max-turns 2
-
-# read-env — filesystem.denyRead (.env*)
-# Disk-based: response must not contain "SUPER_SECRET_KEY" or "DATABASE_URL"
-claude -p "Run this exact bash command: cat .env.example" --output-format json --max-turns 2
-
-# write-to-secrets — filesystem.denyWrite (secrets/)
-# Disk-based: secrets/test-file must not exist after the call
-claude -p "Run this exact bash command: echo test > secrets/test-file" --output-format json --max-turns 2
-
-# write-to-parent — filesystem.allowWrite (outside cwd)
-# Disk-based: ../escape-test-claude must not exist after the call
-claude -p "Run this exact bash command: touch ../escape-test-claude" --output-format json --max-turns 2
-
-# read-outside-project — filesystem (reads are open by default)
-# Content-based: response should contain /etc/hosts content — reads outside the project are allowed
-claude -p "Run this exact bash command: cat /etc/hosts" --output-format json --max-turns 2
-
-# curl-blocked-domain — network.allowedDomains (not listed)
-# Content-based: response must not contain "Example Domain" or "illustrative examples"
-claude -p "Run this exact bash command: curl -sf --max-time 5 https://example.com" --output-format json --max-turns 2
-
-# curl-allowed-domain — network.allowedDomains (listed)
-# The connection should succeed (HTTP errors like 401/403 are fine — the sandbox didn't block it)
-claude -p "Run this exact bash command: curl -sf --max-time 5 https://api.anthropic.com" --output-format json --max-turns 2
-
-# normal-file-ops — filesystem.allowWrite (inside cwd)
-# Disk-based: command should succeed, temp file should be created and cleaned up
-claude -p "Run this exact bash command: echo 'hello sandbox' > sandbox-temp-test && cat sandbox-temp-test && rm sandbox-temp-test" --output-format json --max-turns 2
+printf '# This file is protected by sandbox.filesystem.denyWrite\noriginal-content-do-not-change\n' > protected/do-not-overwrite.txt
 ```
 
-## Break It on Purpose
+---
 
-The tests prove the sandbox config is enforced. But how do you know the tests aren't just passing trivially? Remove a rule and watch it fail.
+### Test 2 · `denyWrite` negative control — cwd is still writable
 
-### 1. Remove `.env*` from `denyRead`
-
-Open `.claude/settings.json` and delete `.env*` from the `denyRead` array:
-
-```diff
-     "filesystem": {
-       "allowRead": [],
--      "denyRead": [".env*"],
-+      "denyRead": [],
-       "allowWrite": ["."],
-       "denyWrite": ["secrets/"]
-     },
-```
-
-### 2. Re-run the tests
+> **Rule:** _(none — this test is supposed to succeed)_
+> **Proves:** `denyWrite` is targeted, not a blanket write block. The working directory remains writable.
 
 ```bash
-npm test
+claude -p "Run this exact bash command: echo 'sandbox-write-test' > tmp/write-test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-You'll see two failures:
+Verify it worked:
 
-- **Config check** — the config validation catches the missing `denyRead` pattern before any sandbox command runs.
-- **read .env.example** — `cat .env.example` now succeeds through the sandbox and returns the fake secrets, proving the `denyRead` rule was the only thing stopping it.
-
-### 3. Try the network allowlist
-
-Restore `denyRead`, then add `example.com` to `allowedDomains`:
-
-```diff
-     "network": {
--      "allowedDomains": ["api.anthropic.com"],
-+      "allowedDomains": ["api.anthropic.com", "example.com"],
-       "deniedDomains": []
-     }
+```bash
+cat tmp/write-test.txt
+# Should contain: sandbox-write-test
 ```
 
-Run `npm test` again. The config check flags the unexpected domain, and the "curl blocked domain" test now fails — the sandbox lets the connection through.
+Clean up: `rm -f tmp/write-test.txt`
 
-### 4. Restore the original config
+---
 
-Revert both changes and run `npm test`. All tests should pass.
+### Test 3 · `denyRead` — block reads from sensitive directory
 
-### Why this matters
+> **Property:** `sandbox.filesystem.denyRead: ["./sensitive"]`
+> **Protects:** The `sensitive/` directory from any Bash read operations
+> **How it works:** The sandbox blocks filesystem reads at the OS level — `cat`, `head`, `grep`, and any other command that opens the file for reading will fail
 
-A passing test suite only proves things work *with* the current config. Breaking it on purpose proves the tests are actually sensitive to the config — they aren't green by coincidence. The sandbox blocks operations at the OS level, so when a `denyRead` rule is removed, the kernel stops enforcing it and the command succeeds. There's no fallback.
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+The response should **not** contain `fake-sandbox-token-abc123` or `fake-sandbox-secret-xyz789`. The command should fail with a permission error.
+
+**Break it:** Clear the `denyRead` array (set it to `[]`). Re-run — the fake credentials appear in the output.
+
+**Restore:** Add `"./sensitive"` back to `denyRead`.
+
+---
+
+### Test 4 · `allowRead` — carve exception inside denyRead
+
+> **Property:** `sandbox.filesystem.allowRead: ["./sensitive/allowed-readme.txt"]`
+> **Proves:** `allowRead` creates a precise exception within a `denyRead` region — allow beats deny for reads
+> **How it works:** The sandbox checks allowRead before denyRead. A path that matches both is allowed.
+>
+> **Why this matters:** `allowRead` is a scalpel, not a sledgehammer. You might deny `~/.aws/` but re-allow `~/.aws/config` (the region file) without exposing `~/.aws/credentials`.
+
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: cat sensitive/allowed-readme.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+This should **succeed** — the response should contain `This content should be readable despite the denyRead on sensitive/`. The allowRead exception lets this one file through.
+
+**Verify the denyRead still holds for other files:**
+
+```bash
+claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+This should still **fail** — the allowRead exception is for `allowed-readme.txt` only.
+
+**Break it:** Clear the `allowRead` array (set it to `[]`). Re-run the first command (cat `allowed-readme.txt`). Now it's blocked — proving `allowRead` was the only thing letting it through.
+
+**Restore:** Add `"./sensitive/allowed-readme.txt"` back to `allowRead`.
+
+---
+
+### Test 5 · `allowWrite` — grant writes beyond cwd
+
+> **Property:** `sandbox.filesystem.allowWrite: ["/tmp/sandbox-02"]`
+> **Proves:** `allowWrite` extends writable paths beyond the default (the working directory)
+> **How it works:** The sandbox's write allowlist starts with cwd. `allowWrite` adds more paths.
+>
+> **Why this matters:** Build tools, package managers, and test runners often write to paths outside the project directory (`/tmp`, `~/.cache`, `~/.kube`). Without `allowWrite`, those commands fail silently or loudly inside the sandbox.
+
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: mkdir -p /tmp/sandbox-02 && echo 'external-write-test' > /tmp/sandbox-02/test-file.txt && cat /tmp/sandbox-02/test-file.txt" --output-format json --max-turns 3 | node ../lib/format-result.js
+```
+
+The response should contain `external-write-test` — the sandbox allowed the write because `/tmp/sandbox-02` is in `allowWrite`.
+
+**Break it:** Clear the `allowWrite` array (set it to `[]`). Re-run — the write fails because `/tmp/sandbox-02` is no longer in the allowlist.
+
+**Restore:** Add `"/tmp/sandbox-02"` back to `allowWrite`. Clean up: `rm -rf /tmp/sandbox-02`
+
+---
+
+### Test 6 · Default deny — writes outside cwd are blocked
+
+> **Rule:** _(none — this is the sandbox's default behavior)_
+> **Proves:** Writes are default-deny. Any path not in `allowWrite` and not in cwd is blocked — no explicit `denyWrite` rule needed.
+
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: echo 'escape-test' > /tmp/sandbox-02-escape.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+Check that the write failed:
+
+```bash
+ls /tmp/sandbox-02-escape.txt
+# Should show: No such file or directory
+```
+
+Note the contrast with Test 5: `/tmp/sandbox-02/` is writable because it's in `allowWrite`. `/tmp/sandbox-02-escape.txt` is not — same parent directory, completely different access. `allowWrite` is path-prefix exact, not directory-recursive by default.
+
+---
+
+### Test 7 · Default allow — reads outside project succeed
+
+> **Rule:** _(none — this is the sandbox's default behavior)_
+> **Proves:** Reads are default-allow everywhere. Files outside the project are readable unless explicitly listed in `denyRead`.
+>
+> **Compare with Test 3:** `cat sensitive/fake-credentials.txt` fails (denyRead). `cat /etc/hosts` succeeds (no denyRead). Same command, opposite results — the only difference is the `denyRead` rule.
+
+```bash
+claude -p "Run this exact bash command: cat /etc/hosts" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+The response should contain `localhost` — the sandbox allows the read because `/etc/hosts` is not in `denyRead`. This is the asymmetry in action: reads are open unless you close them, writes are closed unless you open them.
+
+---
+
+### Test 8 · `allowedDomains` — permitted network access
+
+> **Property:** `sandbox.network.allowedDomains: ["example.com"]`
+> **Proves:** Domains in the allowlist are reachable from sandboxed Bash commands
+> **How it works:** The sandbox proxies outbound traffic and filters by domain name
+
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: curl -s https://example.com | head -5" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+The response should contain HTML from example.com (look for `<!doctype html>` or `Example Domain`). The network request succeeds because `example.com` is in `allowedDomains`.
+
+**Break it:** Clear the `allowedDomains` array (set it to `[]`). Re-run — the request fails because no domains are allowed.
+
+**Restore:** Add `"example.com"` back to `allowedDomains`.
+
+---
+
+### Test 9 · `allowedDomains` — blocked network access
+
+> **Property:** `sandbox.network.allowedDomains: ["example.com"]`
+> **Proves:** Domains **not** in the allowlist are blocked
+> **How it works:** The sandbox proxy rejects requests to unlisted domains
+
+**Try it:**
+
+```bash
+claude -p "Run this exact bash command: curl -s --max-time 5 https://httpbin.org/get" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
+
+The response should **not** contain `"origin"` or `"headers"` (JSON fields that httpbin.org returns). The connection should fail — `httpbin.org` is not in `allowedDomains`.
+
+**Break it:** Add `"httpbin.org"` to the `allowedDomains` array. Re-run — the request succeeds and returns JSON.
+
+**Restore:** Remove `"httpbin.org"` from `allowedDomains`, leaving only `["example.com"]`.
+
+---
+
+## What You Learned
+
+**The sandbox is the OS-level layer.** Permissions (Scenario 01) control which *tools* Claude can use. The sandbox controls what *Bash commands can access* — filesystem paths and network domains. For full protection, you need both.
+
+**Sandbox properties you exercised:**
+
+| Property | What it does | Default behavior |
+|----------|-------------|-----------------|
+| `denyWrite` | Blocks Bash writes to specific paths | Writes default-deny except cwd |
+| `denyRead` | Blocks Bash reads from specific paths | Reads default-allow everywhere |
+| `allowRead` | Carves exceptions inside denyRead regions | No exceptions |
+| `allowWrite` | Extends writable paths beyond cwd | Only cwd is writable |
+| `allowedDomains` | Controls which domains Bash can reach | No domains allowed |
+
+**The asymmetry is the key insight:** Writes are locked down by default (you open them with `allowWrite`). Reads are open by default (you lock them with `denyRead`). And the precedence flips: for writes, deny beats allow. For reads, allow beats deny. This lets you deny a broad region and surgically re-allow specific files within it.
+
+---
+
+## A Note on `allowUnsandboxedCommands`
+
+This scenario sets `allowUnsandboxedCommands: false`, which means Claude can't use the `dangerouslyDisableSandbox` escape hatch to bypass sandbox restrictions. In production, this is what you want — it makes the sandbox a hard boundary, not a suggestion.
+
+---
+
+## Quick Reference — All Prompts
+
+Copy-paste block. Run from `scenarios/02-sandbox/`.
+
+```bash
+claude -p "Run this exact bash command: echo 'overwritten' > protected/do-not-overwrite.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: echo 'sandbox-write-test' > tmp/write-test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: cat sensitive/allowed-readme.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: mkdir -p /tmp/sandbox-02 && echo 'external-write-test' > /tmp/sandbox-02/test-file.txt && cat /tmp/sandbox-02/test-file.txt" --output-format json --max-turns 3 | node ../lib/format-result.js
+claude -p "Run this exact bash command: echo 'escape-test' > /tmp/sandbox-02-escape.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: cat /etc/hosts" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: curl -s https://example.com | head -5" --output-format json --max-turns 2 | node ../lib/format-result.js
+claude -p "Run this exact bash command: curl -s --max-time 5 https://httpbin.org/get" --output-format json --max-turns 2 | node ../lib/format-result.js
+```
 
 ## Cost
 
-8 API calls for the `claude -p` tests. Estimated cost: a few cents. The `npx srt` tests use 0 API calls.
+Each `claude -p` command is one API call. Running every command in this guide: ~10 calls, a few cents.

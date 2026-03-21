@@ -1,0 +1,2 @@
+# This file is protected by sandbox.filesystem.denyWrite
+original-content-do-not-change

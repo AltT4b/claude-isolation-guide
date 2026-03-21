@@ -2,9 +2,12 @@
   "permissions": {
     "deny": [
       "Read(.env*)",
+      "Read(/secrets/**)",
       "Edit(.claude/settings*)",
       "Write(.claude/settings*)",
       "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm *)",
       "WebFetch(*)",
       "WebSearch(*)",
       "Agent(*)"
