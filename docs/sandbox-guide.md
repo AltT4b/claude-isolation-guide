@@ -365,9 +365,28 @@ Permissions and sandbox are **two layers** that work together:
 1. **Permissions** (tool-level): control which tools Claude can invoke — evaluated first
 2. **Sandbox** (OS-level): enforce what bash commands can actually access on disk and network — applied to bash execution only
 
-Path rules merge between the two systems:
-- `Read(./secrets/**)` deny permission rules merge with `sandbox.filesystem.denyRead`
-- `Edit(/etc/**)` deny permission rules merge with `sandbox.filesystem.denyWrite`
+### Which tools each layer covers
+
+- **Sandbox:** Bash commands only. Every Bash invocation runs inside bubblewrap's namespace isolation, subject to filesystem and network rules.
+- **Permissions:** All tools — Read, Write, Edit, Bash, WebFetch, WebSearch, Agent, and MCP tools.
+- **Native tools bypass the sandbox entirely.** Read, Write, Edit, WebFetch, WebSearch, and Agent do not run inside bubblewrap. The sandbox cannot restrict them. Only `permissions.deny` rules can block native tool access.
+
+### Merge direction: permissions feed into sandbox
+
+Path patterns from `permissions.deny` are merged **into** the sandbox's filesystem lists at the OS level. The direction is one-way — permissions feed into sandbox, not the reverse:
+
+- `Read(...)` deny rule paths merge into `sandbox.filesystem.denyRead`
+- `Edit(...)` deny rule paths merge into `sandbox.filesystem.denyWrite`
+
+The practical effect: a single deny rule like `Read(.env*)` blocks both the Read tool (at the permissions layer) and Bash commands like `cat .env` (at the sandbox layer, via merge into denyRead). A `sandbox.filesystem.denyRead` entry alone would only block Bash reads — native tools would still have access.
+
+### Error attribution
+
+Because the merged path lists blur the boundary between layers, Claude may report a permissions-layer block as "sandbox policy." The block is real — the attribution is imprecise. This is a cosmetic issue, not a security gap.
+
+### Deny rules under bypassPermissions
+
+`permissions.deny` rules are enforced regardless of `defaultMode`, including under `bypassPermissions`. Bypass mode skips permission prompts but does not override deny rules. This makes `bypassPermissions` + targeted deny rules a practical production configuration. See the [Permissions Guide](permissions-guide.md#permissionsdefaultmode) for details.
 
 ---
 
