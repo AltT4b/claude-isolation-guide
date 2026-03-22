@@ -35,10 +35,11 @@ RUN groupadd --gid 1001 claude && \
 
 WORKDIR /home/claude/project
 
-# Test fixtures — fake secrets for sandbox tests
-RUN echo 'API_KEY=sk-example-not-real-1234567890\nDATABASE_URL=postgres://user:pass@localhost:5432/mydb' > .env && \
+# Test fixtures — fake secrets the sandbox should protect
+RUN echo 'API_KEY=sk-example-not-real-1234567890' > .env && \
+    echo 'DATABASE_URL=postgres://user:pass@localhost:5432/mydb' >> .env && \
     mkdir -p secrets && \
-    echo 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE' > secrets/prod-credentials.txt
+    echo 'production-database-password-do-not-leak' > secrets/prod-credentials.txt
 
 # Make format-result.js available for test output formatting
 COPY lib/format-result.js /home/claude/lib/format-result.js
