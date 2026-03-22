@@ -1,11 +1,13 @@
 # Scenario 01 — Deny Rules
 
-Deny rules are the strongest permission control in Claude Code. A denied tool invocation is blocked before it executes — no other setting can override it. This scenario walks you through every deny rule in the config, lets you see each one work, and then lets you break it on purpose to prove the rule was the only thing stopping Claude.
+Deny rules are the strongest permission control in Claude Code. A denied tool invocation is blocked before it executes — no other setting can override it.
 
-Every test follows the same rhythm:
+This scenario walks you through every deny rule in the config. You'll see each one block Claude, then remove the rule and watch Claude succeed — proving the rule was the only thing stopping it.
+
+**Every test follows the same rhythm:**
 
 1. **Try it** — run a `claude -p` command and watch Claude refuse
-2. **Break it** — remove that one deny rule from settings, re-run, and watch Claude succeed
+2. **Break it** — remove that one deny rule, re-run, and watch Claude succeed
 3. **Restore it** — put the rule back before moving on
 
 ## Prerequisites
@@ -23,7 +25,7 @@ Each `claude -p` command is one API call. Running every command in this guide: ~
 
 ### `.claude/settings.json`
 
-This file defines the project's security policy. Every rule is a deny — this scenario locks down tools that could leak secrets, weaken config, make unauthorized network requests, delete files, or spawn subagents.
+Every rule is a deny — locks down tools that could leak secrets, weaken config, make unauthorized network requests, delete files, or spawn subagents.
 
 ```json
 {
@@ -50,7 +52,7 @@ This file defines the project's security policy. Every rule is a deny — this s
 
 **Rule evaluation order:** deny > ask > allow. A deny always wins.
 
-**`defaultMode: "default"`** means Claude prompts for permission on first use of each tool in interactive mode. In `claude -p` (non-interactive) mode, which we use throughout this guide, tools run automatically unless denied — making deny rules the only thing standing between Claude and the action.
+**`defaultMode: "default"`** prompts on first use of each tool interactively. In `claude -p` mode (used throughout this guide), tools run automatically unless denied. Deny rules are the only barrier.
 
 ---
 
@@ -110,8 +112,6 @@ claude -p 'Use the Agent tool to spawn a subagent that creates a file at tmp/age
 
 ## Try It
 
----
-
 ### Test 1 · `Read(.env*)` — filename glob
 
 > **Rule:** `Read(.env*)`
@@ -124,9 +124,9 @@ claude -p 'Use the Agent tool to spawn a subagent that creates a file at tmp/age
 claude -p "Use the Read tool to read .env.example and show its full contents verbatim. Do not paraphrase." --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Claude should refuse. The response should **not** contain `sk-example-not-real-1234567890` or `postgres://user:pass@localhost`. If you see those strings, the deny rule isn't working.
+Claude should refuse. The response should **not** contain `sk-example-not-real-1234567890` or `postgres://user:pass@localhost`.
 
-**Break it:** Open `.claude/settings.json` and remove `"Read(.env*)"` from the deny array. Re-run the same command. Now Claude reads the file and returns the fake secrets — proving the deny rule was the only thing stopping it.
+**Break it:** Remove `"Read(.env*)"` from the deny array in `.claude/settings.json`. Re-run — Claude reads the file and returns the fake secrets.
 
 **Restore:** Add `"Read(.env*)"` back to the deny array.
 
@@ -188,7 +188,7 @@ cat .claude/settings.json
 
 It should still contain the original deny array with all 10 rules.
 
-**Break it:** Remove `"Edit(.claude/settings*)"` from the deny array. Re-run the edit command. Now Claude modifies the file — check with `cat .claude/settings.json` and you'll see `"test": true` added.
+**Break it:** Remove `"Edit(.claude/settings*)"` from the deny array. Re-run — Claude adds `"test": true`. Verify with `cat .claude/settings.json`.
 
 **Restore:** Revert `.claude/settings.json` to its original content (all 10 deny rules). Use `git checkout .claude/settings.json` if you haven't staged changes.
 
@@ -313,7 +313,7 @@ cat tmp/deleteme.txt
 claude -p 'Run this exact bash command: echo "curl is just a word"' --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-This should **succeed** — the response should contain `curl is just a word`. The `Bash(curl *)` deny pattern matches the command name at the start of the invocation, not arbitrary substrings within arguments.
+This should **succeed** — the response should contain `curl is just a word`. `Bash(curl *)` matches the command name at the start, not substrings in arguments.
 
 ---
 
@@ -331,7 +331,7 @@ This should **succeed** — the response should contain `curl is just a word`. T
 claude -p "Use the WebFetch tool to fetch https://example.com and show the full HTML. Do not use Bash or curl." --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-The response should **not** contain `This domain is for use in illustrative examples` (that's actual text from example.com's HTML body — Claude won't produce that exact sentence in a refusal).
+The response should **not** contain `This domain is for use in illustrative examples` (real text from example.com — Claude won't produce that in a refusal).
 
 **Break it:** Remove `"WebFetch(*)"` from the deny array. Re-run — Claude fetches and returns the HTML.
 
@@ -353,7 +353,7 @@ The response should **not** contain `This domain is for use in illustrative exam
 claude -p "Use the WebSearch tool to search for 'xK9mQ2 obscure canary string'. Show the raw results. Do not use any other tool." --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-The response should **not** contain `search_results`, `page_age`, or `"url":` — these are structural patterns that only appear in real search output, never in conversational refusals.
+The response should **not** contain `search_results`, `page_age`, or `"url":` — structural patterns that only appear in real search output.
 
 **Break it:** Remove `"WebSearch(*)"` from the deny array. Re-run — Claude performs the search.
 
@@ -390,11 +390,11 @@ ls tmp/agent-test
 
 ## What You Learned
 
-**Deny is the security boundary.** Every other permission setting — allow, ask, defaultMode — controls *prompting behavior*. Deny controls what Claude *can do*. A denied action is blocked before execution, regardless of any other setting.
+**Deny is the security boundary.** Allow, ask, and defaultMode control *prompting behavior*. Deny controls what Claude *can do*. A denied action is blocked before execution, regardless of any other setting.
 
-**Rule evaluation order: deny > ask > allow.** If a pattern appears in both deny and allow, it's denied. Deny always wins.
+**Rule evaluation: deny > ask > allow.** If a pattern appears in both deny and allow, deny wins.
 
-**Pattern types you exercised:**
+**Pattern types:**
 
 | Pattern | Example | What it matches |
 |---------|---------|----------------|
@@ -409,6 +409,6 @@ ls tmp/agent-test
 
 ## A Note on Testing Permissions in CI
 
-This scenario uses `defaultMode: "default"`, which auto-approves non-denied tools in `claude -p` mode. That makes deny rules easy to test — but **allow rules are invisible** in this mode, because everything not denied runs regardless of the allow list.
+This scenario uses `defaultMode: "default"`, which auto-approves non-denied tools in `claude -p` mode. That makes deny rules easy to test — but **allow rules are invisible**, because everything not denied runs regardless of the allow list.
 
-If you want to test allow rules in a headless/CI context, use `defaultMode: "dontAsk"`. In that mode, tools are auto-denied unless explicitly listed in `permissions.allow` — making the allow list the gatekeeper. This is the only way to verify that your allow rules are correctly scoped when there's no human to answer prompts.
+To test allow rules in CI, use `defaultMode: "dontAsk"` instead. Tools are auto-denied unless explicitly listed in `permissions.allow` — making the allow list the gatekeeper. This is the only way to verify allow rule scoping when there's no human to answer prompts.

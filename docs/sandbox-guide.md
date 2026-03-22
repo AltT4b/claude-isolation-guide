@@ -1,6 +1,6 @@
 # Claude Code Sandbox Guide
 
-Complete reference for all `sandbox.*` properties in Claude Code settings. The sandbox provides **OS-level** filesystem and network isolation for bash commands, complementing the tool-level permissions system.
+Complete reference for all `sandbox.*` properties in Claude Code settings. The sandbox provides **OS-level** filesystem and network isolation for Bash commands (via [bubblewrap](https://github.com/containers/bubblewrap) on Linux, Seatbelt on macOS), complementing the tool-level permissions system.
 
 **Platform support:** macOS, Linux, and WSL2.
 
@@ -10,7 +10,7 @@ Complete reference for all `sandbox.*` properties in Claude Code settings. The s
 
 ### `sandbox.enabled`
 
-Enables bash sandboxing with OS-level filesystem and network isolation.
+Enables Bash sandboxing with OS-level filesystem and network isolation.
 
 - **Type:** boolean
 - **Default:** `false`
@@ -25,7 +25,7 @@ Enables bash sandboxing with OS-level filesystem and network isolation.
 
 ### `sandbox.autoAllowBashIfSandboxed`
 
-Automatically approves bash commands when they run inside the sandbox, without requiring permission prompts. Commands outside sandbox boundaries and those matching explicit deny rules still go through normal permissions.
+Auto-approves Bash commands that run inside the sandbox. Commands outside sandbox boundaries or matching explicit deny rules still go through normal permissions.
 
 - **Type:** boolean
 - **Default:** `true`
@@ -57,7 +57,7 @@ Commands that run **outside** the sandbox (bypass sandbox restrictions). Use for
 
 ### `sandbox.allowUnsandboxedCommands`
 
-Controls whether Claude can use the `dangerouslyDisableSandbox` escape hatch when commands fail inside the sandbox. When `false`, commands must run sandboxed or be listed in `excludedCommands`.
+Controls the `dangerouslyDisableSandbox` escape hatch. When `false`, commands must run sandboxed or be listed in `excludedCommands`.
 
 - **Type:** boolean
 - **Default:** `true`
@@ -186,7 +186,7 @@ Blocks read access to specific paths. Also merges with paths from `Read(...)` de
 
 ### `sandbox.filesystem.allowRead`
 
-Re-allows reading specific paths within a `denyRead` region. Creates exceptions to deny rules. Takes precedence over `denyRead`.
+Carves exceptions within a `denyRead` region. Takes precedence over `denyRead`.
 
 - **Type:** array of path strings
 - **Default:** `[]`
@@ -227,7 +227,7 @@ This blocks reading the entire home directory but allows reading the project dir
 
 ### `sandbox.network.allowedDomains`
 
-Domains that bash commands can access for outbound network traffic. Domains not listed trigger a user confirmation prompt. Supports wildcard subdomains.
+Domains that Bash commands can access for outbound network traffic. Domains not listed trigger a user confirmation prompt. Supports wildcard subdomains.
 
 - **Type:** array of domain strings
 - **Default:** `[]`
@@ -363,30 +363,30 @@ SOCKS5 proxy port for outbound network traffic from sandboxed commands. If not s
 Permissions and sandbox are **two layers** that work together:
 
 1. **Permissions** (tool-level): control which tools Claude can invoke — evaluated first
-2. **Sandbox** (OS-level): enforce what bash commands can actually access on disk and network — applied to bash execution only
+2. **Sandbox** (OS-level): enforce what Bash commands can actually access on disk and network — applied to Bash execution only
 
 ### Which tools each layer covers
 
-- **Sandbox:** Bash commands only. Every Bash invocation runs inside bubblewrap's namespace isolation, subject to filesystem and network rules.
+- **Sandbox:** Bash commands only. Every Bash invocation runs inside the sandbox's namespace isolation, subject to filesystem and network rules.
 - **Permissions:** All tools — Read, Write, Edit, Bash, WebFetch, WebSearch, Agent, and MCP tools.
-- **Native tools bypass the sandbox entirely.** Read, Write, Edit, WebFetch, WebSearch, and Agent do not run inside bubblewrap. The sandbox cannot restrict them. Only `permissions.deny` rules can block native tool access.
+- **Native tools bypass the sandbox entirely.** Read, Write, Edit, WebFetch, WebSearch, and Agent do not run inside the sandbox. Only `permissions.deny` rules can block native tool access.
 
 ### Merge direction: permissions feed into sandbox
 
-Path patterns from `permissions.deny` are merged **into** the sandbox's filesystem lists at the OS level. The direction is one-way — permissions feed into sandbox, not the reverse:
+Path patterns from `permissions.deny` merge **into** the sandbox's filesystem lists. One-way: permissions feed into sandbox, not the reverse.
 
 - `Read(...)` deny rule paths merge into `sandbox.filesystem.denyRead`
 - `Edit(...)` deny rule paths merge into `sandbox.filesystem.denyWrite`
 
-The practical effect: a single deny rule like `Read(.env*)` blocks both the Read tool (at the permissions layer) and Bash commands like `cat .env` (at the sandbox layer, via merge into denyRead). A `sandbox.filesystem.denyRead` entry alone would only block Bash reads — native tools would still have access.
+The practical effect: `Read(.env*)` blocks both the Read tool and `cat .env` in Bash. A `sandbox.filesystem.denyRead` entry alone only blocks Bash — native tools would still have access.
 
 ### Error attribution
 
-Because the merged path lists blur the boundary between layers, Claude may report a permissions-layer block as "sandbox policy." The block is real — the attribution is imprecise. This is a cosmetic issue, not a security gap.
+Because merged path lists blur the boundary between layers, Claude may report a permissions-layer block as "sandbox policy." The block is real; the attribution is just imprecise.
 
 ### Deny rules under bypassPermissions
 
-`permissions.deny` rules are enforced regardless of `defaultMode`, including under `bypassPermissions`. Bypass mode skips permission prompts but does not override deny rules. This makes `bypassPermissions` + targeted deny rules a practical production configuration. See the [Permissions Guide](permissions-guide.md#permissionsdefaultmode) for details.
+`permissions.deny` rules are enforced regardless of `defaultMode`. Bypass mode skips prompts, not deny rules — making `bypassPermissions` + targeted denies a practical production configuration. See the [Permissions Guide](permissions-guide.md#permissionsdefaultmode).
 
 ---
 

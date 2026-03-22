@@ -1,8 +1,8 @@
 # Scenario 03 — Containers
 
-Run Claude Code inside a hardened Docker container. The container enforces isolation at the OS level — non-root user, dropped capabilities, noexec tmpfs, resource limits — controls that work even if every voluntary setting (permissions, sandbox rules) is bypassed.
+Run Claude Code inside a hardened Docker container. The container enforces isolation at the OS level — non-root user, dropped capabilities, noexec tmpfs, resource limits — controls that work even if every voluntary setting (permissions, sandbox) is bypassed.
 
-Every test follows the same rhythm:
+**Every test follows the same rhythm:**
 
 1. **Try it** — run a `claude -p` command inside the container and observe the constraint
 2. **Break it** — edit `docker-compose.yml` to remove that one flag, rebuild, re-enter, and watch the constraint disappear
@@ -59,9 +59,8 @@ services:
 
 **Per-setting annotations:**
 
-- **`init: true`** — Runs [tini](https://github.com/krallin/tini) as PID 1.
-  Without it, if node or Claude Code crashes, orphaned child processes become zombies that accumulate until the container is killed.
-  Tini reaps them automatically.
+- **`init: true`** — Runs [tini](https://github.com/krallin/tini) as PID 1 to reap zombie processes.
+  Without it, orphaned child processes accumulate until the container is killed.
 - **`cap_drop: [ALL]`** — Drops every Linux capability.
   No raw sockets, no mount, no kernel namespace creation.
   Claude Code's built-in sandbox (bwrap) needs `CAP_SYS_ADMIN` to create namespaces, so it won't run here — the container itself is the sandbox. If you want both layers, see [Scenario 04](../04-container-with-sandbox/).
@@ -113,7 +112,6 @@ WORKDIR /home/claude/project
 # Make format-result.js available for test output formatting
 COPY lib/format-result.js /home/claude/lib/format-result.js
 
-
 RUN chown -R claude:claude /home/claude
 
 USER claude
@@ -127,6 +125,24 @@ CMD ["/bin/bash"]
 - **Claude Code** — Installed globally via npm.
 - **User creation** — Non-root user `claude` (uid 1001, gid 1001) with home directory.
 - **format-result.js** — Copied from `lib/` so test output formatting works inside the container.
+- **Settings** — `.claude/settings.json` is copied into the image at build time.
+
+### `.claude/settings.json`
+
+```json
+{
+  "permissions": {
+    "deny": [],
+    "allow": [],
+    "ask": [],
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+
+**`defaultMode: "bypassPermissions"`** with an empty deny list — no software-layer restrictions. The container is the entire security boundary.
+
+---
 
 ## Run It
 
@@ -135,7 +151,7 @@ docker compose build
 docker compose run --rm bash
 ```
 
-You land in an interactive bash shell inside the hardened container. Authenticate before running tests:
+You land in an interactive shell inside the hardened container. Authenticate before running tests:
 
 ```bash
 claude login
@@ -186,8 +202,6 @@ claude -p "Run this exact command and show the output: ls -la /.dockerenv" --out
 ---
 
 ## Try It
-
----
 
 ### Test 1 · Non-root user
 
@@ -306,9 +320,9 @@ This should succeed — `/.dockerenv` exists in every Docker container. This con
 
 ## What You Learned
 
-Container controls enforce at the OS level — they work even if every voluntary control (permissions, sandbox rules) is bypassed. The kernel enforces dropped capabilities and cgroup limits regardless of what Claude's settings say.
+Container controls are kernel-enforced — they work even if every voluntary control (permissions, sandbox) is bypassed.
 
-Break/Restore required a rebuild each time. That's the tradeoff: container isolation is heavier to change than a settings.json edit, but it's also heavier to circumvent. An attacker who compromises Claude Code can edit `settings.json` from inside the process. They can't edit `docker-compose.yml` and rebuild from inside the container.
+The tradeoff: Break/Restore required a rebuild each time. That friction is a feature — a compromised process can edit `settings.json`, but it can't edit `docker-compose.yml` and rebuild from inside the container.
 
 | Control | Docker flag | What it enforces | Tested? |
 |---------|------------|-----------------|---------|
@@ -319,13 +333,13 @@ Break/Restore required a rebuild each time. That's the tradeoff: container isola
 | Init process | `init: true` | Tini reaps zombie processes — prevents accumulation after crashes | Config only |
 | No privilege escalation | `security_opt: [no-new-privileges:true]` | Blocks setuid binaries from regaining dropped capabilities | Config only |
 
-The three config-only controls matter but can't be demonstrated naturally in a tutorial. Resource limits in particular are a key benefit of containerization — they're the only layer that gives you a kernel-enforced memory and CPU ceiling that no `settings.json` edit can bypass.
+The three config-only controls matter but don't lend themselves to a try/break demo. Resource limits are the standout — the only layer that provides a kernel-enforced memory and CPU ceiling no `settings.json` edit can bypass.
 
 ---
 
 ## Notes — Network Isolation
 
-The sandbox runtime (srt) provides **domain-level network filtering** — you can allow `api.anthropic.com` while blocking everything else. Docker has no built-in equivalent.
+The sandbox runtime (SRT) provides **domain-level network filtering** — you can allow `api.anthropic.com` while blocking everything else. Docker has no built-in equivalent.
 
 The options are:
 
@@ -347,11 +361,11 @@ This gives per-domain filtering inside Docker — but with real limitations:
   This adds an entrypoint script and `gosu` as dependencies.
 - **Multiple domains mean multiple DNS lookups at startup**, adding latency and failure modes.
 
-This is workable for production setups where you control the infrastructure, but it's inherently more fragile than srt's `allowedDomains`, which operates at the domain level natively and doesn't require privilege escalation.
+Workable if you control the infrastructure, but inherently more fragile than SRT's `allowedDomains` — which operates at the domain level natively without privilege escalation.
 
 The `bash` service uses bridge networking because it's the simplest option that allows API access.
 
-If you need domain-level filtering, use srt on the host ([Scenario 02](../02-sandbox/)) or combine both approaches ([Scenario 04](../04-container-with-sandbox/)).
+If you need domain-level filtering, use SRT on the host ([Scenario 02](../02-sandbox/)) or combine both approaches ([Scenario 04](../04-container-with-sandbox/)).
 
 ---
 
@@ -386,6 +400,4 @@ If you use VS Code Dev Containers or GitHub Codespaces, the same controls go in 
 }
 ```
 
-Same security controls, different format.
-
-The `mounts` section bind-mounts host gitconfig as read-only — prevents the container from modifying your git identity.
+Same controls, different format. The `mounts` section bind-mounts host gitconfig as read-only — prevents the container from modifying your git identity.

@@ -6,12 +6,12 @@ Complete reference for all `permissions.*` properties in Claude Code settings.
 
 | Scope | Path | Priority |
 |-------|------|----------|
-| Managed | `/Library/Application Support/ClaudeCode/managed-settings.json` (macOS) | Highest |
-| User | `~/.claude/settings.json` | |
-| Project (shared) | `.claude/settings.json` | |
-| Project (local) | `.claude/settings.local.json` (gitignored) | Lowest |
+| Managed | `/Library/Application Support/ClaudeCode/managed-settings.json` (macOS) | 1 — Highest |
+| User | `~/.claude/settings.json` | 2 |
+| Project (shared) | `.claude/settings.json` | 3 |
+| Project (local) | `.claude/settings.local.json` (gitignored) | 4 — Lowest |
 
-**Rule evaluation order:** deny → ask → allow. First matching rule wins. A deny at any level cannot be overridden by a lower-priority level.
+**Rule evaluation:** deny → ask → allow. A deny at any level cannot be overridden by a lower-priority level.
 
 ---
 
@@ -69,7 +69,7 @@ Array of permission rules that Claude is **blocked from using**. Highest priorit
 }
 ```
 
-> **Note:** Path patterns from `Read(...)` deny rules are also merged into `sandbox.filesystem.denyRead`, and `Edit(...)` patterns into `sandbox.filesystem.denyWrite`. This means a single deny rule like `Read(.env*)` blocks both the Read tool (at the permissions layer) and Bash commands like `cat .env` (at the sandbox layer). See the [Sandbox Guide](sandbox-guide.md#how-sandbox-and-permissions-interact) for details.
+> **Note:** `Read(...)` deny patterns also merge into `sandbox.filesystem.denyRead`; `Edit(...)` patterns merge into `sandbox.filesystem.denyWrite`. A single rule like `Read(.env*)` blocks both the Read tool and Bash commands like `cat .env`. See the [Sandbox Guide](sandbox-guide.md#how-sandbox-and-permissions-interact) for details.
 
 ### `permissions.additionalDirectories`
 
@@ -116,9 +116,9 @@ Sets the default permission mode when Claude Code starts.
 }
 ```
 
-> **Note:** `bypassPermissions` still prompts for writes to protected directories. Writes to `.claude/commands`, `.claude/agents`, `.claude/skills` are exempt.
+> **Note:** `bypassPermissions` still prompts for writes to `.git`, `.claude`, `.vscode`, `.idea`. Writes to `.claude/commands`, `.claude/agents`, `.claude/skills` are exempt.
 
-> **Note:** `permissions.deny` rules are enforced regardless of `defaultMode`, including under `bypassPermissions`. Bypass mode skips prompts but does not override deny rules. This makes `bypassPermissions` + targeted deny rules a practical production configuration: full autonomy for allowed operations, hard blocks on dangerous ones.
+> **Important:** `permissions.deny` rules are enforced regardless of `defaultMode`, including under `bypassPermissions`. Bypass skips prompts, not deny rules. This makes `bypassPermissions` + targeted deny rules a practical production configuration.
 
 ### `permissions.disableBypassPermissionsMode`
 
@@ -181,7 +181,7 @@ Bash(mid * end)           → wildcard in middle
 - `Bash(ls *)` matches `ls -la` but **not** `lsof` (space before `*` enforces word boundary)
 - `Bash(ls*)` matches both `ls -la` **and** `lsof`
 - Shell operators (`&&`, `||`, `|`) are recognized — `Bash(safe-cmd *)` won't match `safe-cmd && evil-cmd`
-- Compound commands save separate rules for each subcommand (up to 5)
+- Compound commands are split — each subcommand is evaluated against rules separately (up to 5)
 
 ```json
 {

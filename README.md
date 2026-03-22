@@ -1,61 +1,29 @@
 # Claude Code Isolation Guide
 
-A living handbook for understanding and applying a few Claude Code isolation mechanisms — permissions, sandboxing, and containers. 
+Hands-on guide to Claude Code's isolation layers — permissions, sandboxing, and containers. Every concept is backed by a runnable scenario you can try, break, and restore yourself.
 
-Every concept is backed by a runnable scenario you can verify yourself.
+**Pick your starting point:**
 
-## What This Is
+- **New to isolation?** Start with [Scenario 01](scenarios/01-permissions/) — deny rules are the simplest control and the foundation for everything else.
+- **Already using permissions?** Jump to [Scenario 02](scenarios/02-sandbox/) for OS-level filesystem and network controls.
+- **Running in Docker?** [Scenario 03](scenarios/03-containers/) hardens the container. [Scenario 04](scenarios/04-container-with-sandbox/) combines all three layers.
 
-Hands-on experience with how Claude Code's isolation controls work. 
+## Reference Docs
 
-The goal: 
- - provide a reference guide along with some proof the concepts work
- - runs real examples, the tests aren't just vaporware
- - provide an understandable lever to break each test case reliably
-
-## Documentation
-
-The [docs/](docs/) directory contains the reference material:
-
-- **[docs/permissions-guide.md](docs/permissions-guide.md)** — Deep dive into `permissions.*` properties: allow/deny rules, tool targeting, settings file precedence.
-- **[docs/sandbox-guide.md](docs/sandbox-guide.md)** — Deep dive into `sandbox.*` properties: OS-level filesystem and network isolation for bash commands.
+- **[Permissions Guide](docs/permissions-guide.md)** — All `permissions.*` properties: allow/deny rules, tool targeting, settings file precedence.
+- **[Sandbox Guide](docs/sandbox-guide.md)** — All `sandbox.*` properties: OS-level filesystem and network isolation for Bash commands.
 
 ## Dependencies
 
-### [Node.js](https://nodejs.org/)
-
-```bash
-# macOS
-brew install node
-
-# Linux/WSL2
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
-
-### [Docker](https://docs.docker.com/get-docker/)
-
-Required for scenarios 03 and 04.
-
-```bash
-# macOS
-brew install --cask docker
-
-# Linux/WSL2
-sudo apt-get install -y docker.io
-```
-
-### [bubblewrap](https://github.com/containers/bubblewrap)
-
-Linux/WSL2 only, for scenario 02. macOS uses Seatbelt (built-in).
-
-```bash
-sudo apt-get install -y bubblewrap
-```
+| Dependency | Required for | macOS | Linux/WSL2 |
+|-----------|-------------|-------|------------|
+| [Node.js](https://nodejs.org/) | All scenarios | `brew install node` | [nodesource setup](https://deb.nodesource.com/setup_lts.x) |
+| [Docker](https://docs.docker.com/get-docker/) | Scenarios 03, 04 | `brew install --cask docker` | `sudo apt-get install -y docker.io` |
+| [bubblewrap](https://github.com/containers/bubblewrap) | Scenario 02 | Not needed (Seatbelt built-in) | `sudo apt-get install -y bubblewrap` |
 
 ## Scenarios
 
-Each scenario lives in its own directory under [scenarios/](scenarios/). Each one is a self-contained experiment that demonstrates a Claude Code isolation technique.
+Each scenario is a self-contained experiment under [scenarios/](scenarios/). Every test follows the same rhythm: **try it** → **break it** → **restore it**.
 
 | # | Scenario | Isolation layer |
 |---|----------|-----------------|

@@ -1,10 +1,10 @@
 # Scenario 02 — Sandbox
 
-The sandbox provides **OS-level** filesystem and network isolation for Bash commands. Unlike permissions (Scenario 01), which control which *tools* Claude can invoke, the sandbox controls what Bash commands can actually *access* — files on disk and domains on the network. Permissions are the bouncer at the door; the sandbox is the locked filing cabinet inside.
+The sandbox provides **OS-level** filesystem and network isolation for Bash commands. Permissions (Scenario 01) are the bouncer at the door; the sandbox is the locked filing cabinet inside.
 
-This scenario tests five sandbox properties: `denyWrite`, `denyRead`, `allowRead`, `allowWrite`, and `allowedDomains`. Every test uses Bash commands because the sandbox only applies to Bash — Claude's other tools (Read, Edit, Write, WebFetch) bypass the sandbox entirely.
+This scenario tests five sandbox properties: `denyWrite`, `denyRead`, `allowRead`, `allowWrite`, and `allowedDomains`. Every test uses Bash commands because the sandbox only applies to Bash — Claude's native tools (Read, Edit, Write, WebFetch) bypass it entirely.
 
-Every test follows the same rhythm:
+**Every test follows the same rhythm:**
 
 1. **Try it** — run a `claude -p` command and watch the sandbox block (or allow) it
 2. **Break it** — change that one sandbox setting, re-run, and watch the opposite happen
@@ -25,7 +25,7 @@ Each `claude -p` command is one API call. Running every command in this guide: ~
 
 ### `.claude/settings.json`
 
-This file defines two layers:
+Two layers configured here:
 
 1. **Permissions** — `bypassPermissions` mode skips all tool-level prompts. The permission system is invisible — the sandbox is the only thing restricting behavior.
 2. **Sandbox** — OS-level rules that constrain what Bash commands can touch.
@@ -58,7 +58,7 @@ This file defines two layers:
 
 **Key design choices:**
 
-- **`defaultMode: "bypassPermissions"`** — removes the permission layer from the equation entirely. No tool prompts, no allow/deny rules in play. Every test is purely sandbox vs. no sandbox.
+- **`defaultMode: "bypassPermissions"`** — no tool prompts, no allow/deny rules. Every test is purely sandbox vs. no sandbox.
 - **`autoAllowBashIfSandboxed: true`** — sandboxed Bash commands run without prompting.
 - **`allowUnsandboxedCommands: false`** — Claude can't use `dangerouslyDisableSandbox` to escape the sandbox.
 
@@ -71,8 +71,8 @@ The sandbox treats reads and writes **asymmetrically** — this is the most impo
 | **Writes** | Denied everywhere except cwd | _(already denied)_ | `allowWrite` | `denyWrite` > `allowWrite` |
 | **Reads** | Allowed everywhere | `denyRead` | `allowRead` | `allowRead` > `denyRead` |
 
-- **Writes are default-deny.** Only the working directory is writable. `allowWrite` opens additional paths. `denyWrite` overrides `allowWrite` — deny beats allow.
-- **Reads are default-allow.** Everything is readable. `denyRead` blocks specific paths. `allowRead` carves exceptions *within* denied regions — allow beats deny. This is the **opposite** precedence from writes.
+- **Writes are default-deny.** Only cwd is writable. `allowWrite` opens paths; `denyWrite` overrides it. Deny beats allow.
+- **Reads are default-allow.** Everything is readable. `denyRead` blocks paths; `allowRead` carves exceptions within denied regions. Allow beats deny — the opposite of writes.
 
 ### Fixture files
 
@@ -125,7 +125,6 @@ claude -p "Run this exact bash command: echo 'overwritten' > protected/do-not-ov
 claude -p "Run this exact bash command: echo 'sandbox-write-test' > tmp/write-test.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 claude -p "Run this exact bash command: cat sensitive/allowed-readme.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
-claude -p "Run this exact bash command: cat sensitive/fake-credentials.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 claude -p "Run this exact bash command: mkdir -p /tmp/sandbox-02 && echo 'external-write-test' > /tmp/sandbox-02/test-file.txt && cat /tmp/sandbox-02/test-file.txt" --output-format json --max-turns 3 | node ../lib/format-result.js
 claude -p "Run this exact bash command: echo 'escape-test' > /tmp/sandbox-02-escape.txt" --output-format json --max-turns 2 | node ../lib/format-result.js
 claude -p "Run this exact bash command: cat /etc/hosts" --output-format json --max-turns 2 | node ../lib/format-result.js
@@ -136,8 +135,6 @@ claude -p "Run this exact bash command: curl -s --max-time 5 https://httpbin.org
 ---
 
 ## Try It
-
----
 
 ### Test 1 · `denyWrite` — block writes to protected directory
 
@@ -158,7 +155,7 @@ cat protected/do-not-overwrite.txt
 # Should still contain: original-content-do-not-change
 ```
 
-**Break it:** Open `.claude/settings.json` and clear the `denyWrite` array (set it to `[]`). Re-run the same command. Now the file gets overwritten — proving the denyWrite rule was the only thing protecting it.
+**Break it:** Clear the `denyWrite` array (set it to `[]`). Re-run — the file gets overwritten.
 
 **Restore:** Add `"./protected"` back to `denyWrite`. Reset the fixture:
 
@@ -278,7 +275,7 @@ ls /tmp/sandbox-02-escape.txt
 # Should show: No such file or directory
 ```
 
-Note the contrast with Test 5: `/tmp/sandbox-02/` is writable because it's in `allowWrite`. `/tmp/sandbox-02-escape.txt` is not — same parent directory, completely different access. `allowWrite` is path-prefix exact, not directory-recursive by default.
+Contrast with Test 5: `/tmp/sandbox-02/` is writable (in `allowWrite`). `/tmp/sandbox-02-escape.txt` is not. Same parent directory, completely different access — `allowWrite` matches path prefixes, not directory trees.
 
 ---
 
@@ -339,9 +336,9 @@ The response should **not** contain `"origin"` or `"headers"` (JSON fields that 
 
 ## What You Learned
 
-**The sandbox is the OS-level layer.** Permissions (Scenario 01) control which *tools* Claude can use. The sandbox controls what *Bash commands can access* — filesystem paths and network domains. For full protection, you need both.
+**The sandbox is the OS-level layer.** Permissions control which *tools* Claude can use. The sandbox controls what *Bash commands can access*. For full protection, you need both.
 
-**Sandbox properties you exercised:**
+**Properties tested:**
 
 | Property | What it does | Default behavior |
 |----------|-------------|-----------------|
@@ -351,11 +348,7 @@ The response should **not** contain `"origin"` or `"headers"` (JSON fields that 
 | `allowWrite` | Extends writable paths beyond cwd | Only cwd is writable |
 | `allowedDomains` | Controls which domains Bash can reach | No domains allowed |
 
-**The asymmetry is the key insight:** Writes are locked down by default (you open them with `allowWrite`). Reads are open by default (you lock them with `denyRead`). And the precedence flips: for writes, deny beats allow. For reads, allow beats deny. This lets you deny a broad region and surgically re-allow specific files within it.
+**The asymmetry is the key insight:** Writes are closed by default, opened with `allowWrite`. Reads are open by default, closed with `denyRead`. Precedence flips accordingly — and `allowRead` lets you surgically re-allow files within a denied region.
 
----
-
-## A Note on `allowUnsandboxedCommands`
-
-This scenario sets `allowUnsandboxedCommands: false`, which means Claude can't use the `dangerouslyDisableSandbox` escape hatch to bypass sandbox restrictions. In production, this is what you want — it makes the sandbox a hard boundary, not a suggestion.
+**`allowUnsandboxedCommands: false` makes the sandbox a hard boundary.** Claude can't use the `dangerouslyDisableSandbox` escape hatch. In production, this is what you want.
 

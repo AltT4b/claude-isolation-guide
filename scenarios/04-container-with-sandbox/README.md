@@ -1,14 +1,14 @@
 # Scenario 04 — Container with Sandbox
 
-Three isolation layers working together. Container handles privilege boundaries. Sandbox (SRT) handles Bash-level filesystem and network filtering. `permissions.deny` handles native tool access. All active simultaneously.
+Three isolation layers working together — each covers what the others can't:
 
-Each layer covers what the others can't:
+| Layer | What it controls |
+|-------|-----------------|
+| **Sandbox (SRT)** | Bash-level filesystem reads/writes, network connections |
+| **Container** | Privilege boundaries, noexec tmpfs, resource limits |
+| **Permissions deny** | Native tools (Read, Write, Edit, WebFetch, WebSearch, Agent) that bypass the sandbox |
 
-- **Sandbox** — OS-level enforcement on Bash commands: filesystem reads/writes, network connections
-- **Container** — privilege boundaries, noexec tmpfs, resource limits
-- **Permissions deny** — blocks Claude's native tools (Read, Write, Edit, WebFetch, WebSearch, Agent) that bypass the sandbox entirely
-
-Every test follows the same rhythm:
+**Every test follows the same rhythm:**
 
 1. **Try it** — run a `claude -p` command inside the container and observe the constraint
 2. **Break it** — edit the relevant config file, rebuild the image, re-enter, and watch the constraint disappear
@@ -66,8 +66,8 @@ services:
 
 **Per-setting annotations:**
 
-- **`init: true`** — Runs [tini](https://github.com/krallin/tini) as PID 1. Without it, orphaned child processes become zombies that accumulate until the container is killed.
-- **`cap_add: [NET_ADMIN, NET_RAW]`** — SRT's network proxy (socat) needs these capabilities to intercept and filter outbound connections. Scenario 03 drops all capabilities; this scenario adds two back so the sandbox can do domain-level filtering. See [Notes — Capability Tradeoff](#notes--capability-tradeoff) for why this is worthwhile.
+- **`init: true`** — Runs [tini](https://github.com/krallin/tini) as PID 1 to reap zombie processes. Without it, orphans accumulate until the container is killed.
+- **`cap_add: [NET_ADMIN, NET_RAW]`** — SRT's network proxy needs these to intercept outbound connections. Scenario 03 drops all caps; this one adds two back for domain-level filtering. See [Notes — Capability Tradeoff](#notes--capability-tradeoff).
 - **`security_opt: [no-new-privileges:true]`** — Blocks setuid binaries from escalating to root. Compatible with unprivileged user namespaces.
 - **`tmpfs: /tmp:rw,noexec,nosuid,size=256m`** — Writable scratch space. `noexec` prevents running binaries from /tmp and size is capped.
 - **`user: "1001:1001"`** — Runs as non-root. Ubuntu 24.04's unprivileged user namespaces let bwrap work without root or `SYS_ADMIN`.
@@ -178,22 +178,31 @@ CMD ["/bin/bash"]
 }
 ```
 
-Two systems, seven deny rules, one sandbox config. Here's what each piece does:
+**Key design choices:**
 
-- **`defaultMode: "bypassPermissions"`** — Claude can use any tool without prompting. This is the autonomy mode for headless/CI operation. Deny rules are still enforced under bypassPermissions — bypass skips prompts, not deny rules.
-- **`permissions.deny`** — Blocks Claude's native tools regardless of `defaultMode`:
-  - `Read(.env*)` — Blocks the Read tool on .env files. Also merged into `sandbox.filesystem.denyRead`, so a single rule blocks both the Read tool (permissions layer) and Bash reads like `cat .env` (sandbox layer).
-  - `Read(/secrets/**)` — Blocks the Read tool on the secrets directory recursively.
-  - `Edit(.claude/settings*)`, `Write(.claude/settings*)` — Prevents Claude from rewriting its own configuration.
-  - `WebFetch(*)`, `WebSearch(*)` — Blocks native web tools. The sandbox's `allowedDomains` only covers Bash commands (curl, wget); these rules cover the native tools that bypass the sandbox.
-  - `Agent(*)` — Blocks subagent creation to prevent lateral tool use.
-- **`sandbox.enabled: true`** — The sandbox runtime (SRT) uses bubblewrap to enforce filesystem and network rules at the OS level on all Bash commands.
-- **`denyRead: [".env*"]`** — Sandbox blocks Bash commands from reading files matching `.env*`. This overlaps with the `Read(.env*)` deny rule due to merge behavior — both exist for defense in depth. The sandbox entry alone would only block Bash reads; the deny rule alone would block both (via merge) but having both makes the intent explicit.
-- **`denyWrite: ["secrets/"]`** — Sandbox blocks Bash commands from writing to the `secrets/` directory.
-- **`allowedDomains`** — Only `api.anthropic.com` and `statsig.anthropic.com` are allowed. All other outbound connections from Bash commands are blocked by SRT's network proxy.
-- **`allowUnsandboxedCommands: false`** — Every Bash command runs inside the sandbox. No exceptions.
+| Setting | Purpose |
+|---------|---------|
+| `defaultMode: "bypassPermissions"` | Full autonomy — bypass skips prompts, not deny rules |
+| `permissions.deny` | Blocks native tools that bypass the sandbox (see table below) |
+| `sandbox.enabled: true` | SRT uses bubblewrap for OS-level enforcement on all Bash commands |
+| `denyRead: [".env*"]` | Sandbox blocks Bash reads of `.env*` (defense-in-depth with deny rule) |
+| `denyWrite: ["secrets/"]` | Sandbox blocks Bash writes to `secrets/` |
+| `allowedDomains` | Only Anthropic APIs — all other outbound Bash connections blocked |
+| `allowUnsandboxedCommands: false` | Every Bash command runs sandboxed, no exceptions |
 
-**Merge behavior:** `Read(...)` patterns from `permissions.deny` are merged into `sandbox.filesystem.denyRead` at the OS level. `Edit(...)` patterns merge into `sandbox.filesystem.denyWrite`. This is one-directional — permissions feed into the sandbox, not the reverse. The practical effect: a single `Read(.env*)` deny rule protects `.env` from both the Read tool and Bash reads. Error attribution can be imprecise — Claude may report "sandbox policy" when the permissions layer was the actual blocker, because the merged path lists blur the boundary from the model's perspective.
+**Deny rules — why each exists:**
+
+| Rule | Protects against |
+|------|-----------------|
+| `Read(.env*)` | Read tool on .env files (also merges into sandbox `denyRead`) |
+| `Read(/secrets/**)` | Read tool on secrets directory |
+| `Edit/Write(.claude/settings*)` | Claude rewriting its own config |
+| `WebFetch(*)`, `WebSearch(*)` | Native web tools that bypass the sandbox |
+| `Agent(*)` | Lateral tool use via subagents |
+
+> **Merge behavior:** `Read(...)` deny patterns merge into `sandbox.filesystem.denyRead`; `Edit(...)` patterns into `denyWrite`. One-directional: permissions feed into sandbox, not the reverse. A single `Read(.env*)` rule protects `.env` from both the Read tool and Bash reads.
+
+---
 
 ## Run It
 
@@ -202,7 +211,7 @@ docker compose build
 docker compose run --rm bash
 ```
 
-You land in an interactive bash shell inside the container. Authenticate before running tests:
+You land in an interactive shell inside the container. Authenticate before running tests:
 
 ```bash
 claude login
@@ -229,17 +238,7 @@ claude login
 
 ## Output Format
 
-Every `claude -p` command pipes through `../lib/format-result.js`, a small Node script that extracts the human-readable fields from the JSON output:
-
-```
-PASS  (2 turns, 13.8s, $0.0252)
-
-Claude ran the command and showed the output.
-```
-
-To see the raw JSON instead, drop the `| node ../lib/format-result.js` suffix.
-
-Inside the container, the pipe syntax is `| node ../lib/format-result.js` — this works because `working_dir` is `/home/claude/project` and format-result.js is at `/home/claude/lib/format-result.js`.
+Same as [Scenario 03](../03-containers/README.md#output-format) — every `claude -p` command pipes through `../lib/format-result.js` for human-readable output. Drop the pipe suffix to see raw JSON.
 
 ---
 
@@ -271,6 +270,8 @@ claude -p "Use the WebFetch tool to fetch https://example.com and show the respo
 
 ---
 
+## Try It
+
 ### Test 1 · Sandbox blocks secret reads
 
 > **Layer:** Sandbox (SRT)
@@ -283,11 +284,11 @@ claude -p "Use the WebFetch tool to fetch https://example.com and show the respo
 claude -p "Run this exact command and show the output: cat .env" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-The sandbox intercepts the `cat` command at the OS level. You'll see an error — the sandbox blocked the read before the shell could open the file. The `.env` file exists (it was created in the Dockerfile) but the sandbox won't let Bash access it.
+The sandbox blocks the read at the OS level — the file exists but Bash can't open it.
 
-Note: the `Read(.env*)` deny rule also merges into `denyRead`, so this path is doubly protected. Even if you removed `.env*` from the sandbox's `denyRead` list, the deny rule's merge would still block `cat .env`.
+This path is doubly protected: the `Read(.env*)` deny rule also merges into `denyRead`. Even without the explicit sandbox entry, the deny rule's merge would still block `cat .env`.
 
-**Break it:** In `.claude/settings.json`, remove `.env*` from `denyRead` AND remove `Read(.env*)` from `permissions.deny` (both contribute to the sandbox denyRead list via merge):
+**Break it:** Remove both — `.env*` from `denyRead` and `Read(.env*)` from `permissions.deny` (both feed into the sandbox via merge):
 
 ```diff
      "deny": [
@@ -339,7 +340,7 @@ The sandbox blocks the connection. `example.com` isn't in `allowedDomains`, so S
 claude -p "Run this exact command and show the output: curl -s --max-time 5 https://api.anthropic.com" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-This succeeds (you'll get an HTTP response, possibly an error like 401/403 — the point is the connection went through). The sandbox allows `api.anthropic.com`.
+This succeeds — you'll get an HTTP response (possibly 401/403, but the connection went through).
 
 **Break it:** In `.claude/settings.json`, add `example.com` to `allowedDomains`:
 
@@ -494,7 +495,7 @@ This succeeds. We have `NET_RAW` because SRT's network proxy needs it. In scenar
 
 **But the sandbox still blocks unapproved domains** — Test 2 already proved that `curl https://example.com` is blocked. Even though the container has the network capabilities to make the connection, SRT's `allowedDomains` filter catches it at the proxy level.
 
-This is the tradeoff in action: we relaxed container capabilities to enable SRT's network proxy, and the proxy compensates by providing surgical domain-level filtering that Docker can't do natively. The net result is more granular control, not less.
+This is the tradeoff in action: we relaxed container capabilities to enable SRT's network proxy, and the proxy compensates with surgical domain-level filtering that Docker can't do natively.
 
 ---
 
@@ -510,9 +511,9 @@ This is the tradeoff in action: we relaxed container capabilities to enable SRT'
 claude -p "Use the Read tool to read the file .env and show its full contents verbatim" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-The Read tool is blocked. Claude reports that the file is restricted by policy. The `Read(.env*)` deny rule catches the native Read tool — which operates outside the sandbox entirely.
+Blocked. The `Read(.env*)` deny rule catches the native Read tool, which operates outside the sandbox entirely.
 
-**Without this deny rule:** The Read tool bypasses the sandbox. `sandbox.filesystem.denyRead` only applies to Bash commands; native tools like Read, Write, and Edit are not sandboxed. In earlier iterations of this scenario (with an empty deny list), this exact command succeeded and leaked the fake secrets. The deny rule closes that gap.
+**Why this rule matters:** `sandbox.filesystem.denyRead` only applies to Bash commands. Without the deny rule, the Read tool would bypass the sandbox and read `.env` directly.
 
 **Break it:** In `.claude/settings.json`, remove `Read(.env*)` from `permissions.deny`:
 
@@ -586,9 +587,9 @@ Re-run the command. The Read tool now succeeds — Claude reads the fake product
 claude -p "Use the Write tool to write the text 'pwned' to the file .claude/settings.json" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Blocked. The `Write(.claude/settings*)` deny rule prevents Claude from overwriting its own settings. The matching `Edit(.claude/settings*)` rule covers the Edit tool too — Claude can't modify the file through either tool.
+Blocked. Both `Write(.claude/settings*)` and `Edit(.claude/settings*)` are denied — Claude can't modify the file through either tool.
 
-This is a critical control: without it, Claude could remove its own deny rules and then proceed unchecked.
+Critical control: without it, Claude could remove its own deny rules and proceed unchecked.
 
 **Break it:** In `.claude/settings.json`, remove both settings-related deny rules:
 
@@ -627,7 +628,7 @@ Re-run the command. The Write tool now succeeds — Claude overwrites `.claude/s
 claude -p "Use the WebFetch tool to fetch https://example.com and show the response" --output-format json --max-turns 2 | node ../lib/format-result.js
 ```
 
-Blocked. The `WebFetch(*)` deny rule prevents the native WebFetch tool from making any request. The sandbox's `allowedDomains` only covers Bash commands (curl, wget) — native tools bypass the sandbox entirely. Without this deny rule, Claude could use WebFetch to reach any domain.
+Blocked. `allowedDomains` only covers Bash commands — native tools like WebFetch bypass the sandbox. Without this deny rule, Claude could reach any domain.
 
 `WebSearch(*)` is the same control for web search queries. It's configured in the deny list but not tested separately — the mechanism is identical.
 
@@ -661,11 +662,13 @@ Re-run the command. The WebFetch tool now succeeds — Claude fetches the page c
 
 Three layers, each covering what the others can't:
 
-- **Sandbox** catches Bash-level attacks — filesystem reads/writes and network connections are filtered at the OS level by bubblewrap's namespace isolation
-- **Container** adds privilege boundaries — non-root user, noexec tmpfs, resource limits, no-new-privileges. These survive even if the sandbox is misconfigured
-- **Permissions deny** catches native tool access — Read, Write, Edit, WebFetch, WebSearch, and Agent bypass the sandbox entirely. Only deny rules can restrict them
+| Layer | Catches |
+|-------|---------|
+| **Sandbox** | Bash-level filesystem and network access via bubblewrap |
+| **Container** | Privilege escalation, noexec tmpfs, resource limits — survives sandbox misconfiguration |
+| **Permissions deny** | Native tool access (Read, Write, Edit, WebFetch, WebSearch, Agent) that bypasses the sandbox |
 
-The key insight: `bypassPermissions` skips prompts but does not override deny rules. You get full autonomy for allowed operations and hard blocks on dangerous ones. This is the production configuration — not "permissions wide open with gaps" but "permissions wide open with targeted deny rules closing the gaps."
+**The key insight:** `bypassPermissions` skips prompts but does not override deny rules. Full autonomy for allowed operations, hard blocks on dangerous ones. This is the production configuration.
 
 ### Controls
 
@@ -700,7 +703,7 @@ The key insight: `bypassPermissions` skips prompts but does not override deny ru
 
 Scenario 03 uses `cap_drop: ALL` — the most restrictive capability setting. This scenario uses `cap_add: [NET_ADMIN, NET_RAW]` instead. Why the difference?
 
-SRT's network proxy (socat) needs `NET_ADMIN` to set up iptables rules for domain filtering and `NET_RAW` for raw socket access. Without these capabilities, the sandbox can't intercept outbound connections — you'd lose domain-level network filtering entirely.
+SRT's network proxy (socat) needs `NET_ADMIN` to set up iptables rules for domain filtering and `NET_RAW` for raw socket access. Without these capabilities, the sandbox can't intercept outbound connections — no domain-level filtering.
 
 The tradeoff:
 
@@ -712,6 +715,6 @@ The tradeoff:
 | **Risk** | Minimal attack surface | NET_ADMIN could theoretically manipulate network config |
 | **Mitigation** | Container is the sandbox | Sandbox + container + deny rules compensate |
 
-`NET_ADMIN` is the more concerning capability — it allows manipulating network interfaces, routing tables, and firewall rules. In practice, the non-root user and `no-new-privileges` constraints limit what can be done with it, and the benefit (surgical domain filtering) outweighs the theoretical risk for most use cases.
+`NET_ADMIN` is the more concerning capability — it allows manipulating network interfaces, routing tables, and firewall rules. In practice, the non-root user and `no-new-privileges` constraints limit what can be done with it.
 
-If you don't need domain-level network filtering, use scenario 03's `cap_drop: ALL` instead. If you do need it, the combined three-layer architecture here provides more granular control than any single layer alone.
+**Rule of thumb:** If you don't need domain-level network filtering, use Scenario 03's `cap_drop: ALL`. If you do, the three-layer architecture here provides more granular control than any single layer alone.
