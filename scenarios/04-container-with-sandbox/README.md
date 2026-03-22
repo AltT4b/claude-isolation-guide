@@ -19,7 +19,7 @@ Break/Restore requires exiting the container and rebuilding each time. Settings 
 
 ## Cost
 
-Each `claude -p` command is one API call. Running every command in this guide: ~7 calls, a few cents.
+Each `claude -p` command is one API call. Running every command in this guide: ~8 calls, a few cents.
 
 ## Configuration
 
@@ -483,7 +483,7 @@ In scenarios 01-03, permission deny rules (`Read(.env*)`) would block this. But 
 
 There is no Break/Restore for this test. This **is** the gap.
 
-**The fix:** Add `Read(.env*)` to `permissions.deny`. But then you're no longer in pure `bypassPermissions` mode — you're mixing permission deny rules with sandbox rules, which is what production deployments should do. That's [Scenario 04's original configuration](https://github.com/anthropics/claude-code/blob/main/docs/security.md) and what this scenario intentionally strips away to show the boundary.
+**The fix:** Add `Read(.env*)` to `permissions.deny`. But then you're no longer in pure `bypassPermissions` mode — you're combining permission deny rules with sandbox rules. That's the production approach: use `bypassPermissions` for autonomy, then add targeted deny rules for your most sensitive paths.
 
 ---
 
