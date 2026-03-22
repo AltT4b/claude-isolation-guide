@@ -1,6 +1,14 @@
 {
   "permissions": {
-    "deny": [],
+    "deny": [
+      "Read(.env*)",
+      "Read(/secrets/**)",
+      "Edit(.claude/settings*)",
+      "Write(.claude/settings*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Agent(*)"
+    ],
     "allow": [],
     "ask": [],
     "defaultMode": "bypassPermissions"

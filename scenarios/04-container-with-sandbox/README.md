@@ -271,10 +271,6 @@ claude -p "Use the WebFetch tool to fetch https://example.com and show the respo
 
 ---
 
-## Try It
-
----
-
 ### Test 1 · Sandbox blocks secret reads
 
 > **Layer:** Sandbox (SRT)
